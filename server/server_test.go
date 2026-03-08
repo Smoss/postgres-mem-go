@@ -16,7 +16,7 @@ func TestServer_ConnectAndPing(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	// Get the actual address
 	addr := srv.Addr()
@@ -39,7 +39,7 @@ func TestServer_ConnectAndPing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
 	}
-	defer conn.Close(context.Background())
+	defer func() { _ = conn.Close(context.Background()) }()
 
 	// Ping the server
 	pingCtx, pingCancel := context.WithTimeout(
@@ -61,7 +61,7 @@ func TestServer_MultipleConnections(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	addr := srv.Addr()
 	connStr := fmt.Sprintf(
@@ -79,7 +79,7 @@ func TestServer_MultipleConnections(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create connection %d: %v", i, err)
 		}
-		defer conn.Close(context.Background())
+		defer func() { _ = conn.Close(context.Background()) }()
 
 		if err := conn.Ping(ctx); err != nil {
 			t.Fatalf("Failed to ping on connection %d: %v", i, err)

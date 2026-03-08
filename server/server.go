@@ -60,7 +60,7 @@ func (s *Server) Stop() error {
 	if s.closed.CompareAndSwap(false, true) {
 		s.cancel()
 		if s.listener != nil {
-			s.listener.Close()
+			_ = s.listener.Close()
 		}
 	}
 	s.wg.Wait()

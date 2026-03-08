@@ -9,7 +9,7 @@ import (
 
 // handleConnection handles a single client connection.
 func handleConnection(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	backend := pgproto3.NewBackend(conn, conn)
 
@@ -22,7 +22,7 @@ func handleConnection(conn net.Conn) {
 	// Handle SSL request - we don't support it
 	if _, ok := startupMsg.(*pgproto3.SSLRequest); ok {
 		// Send 'N' to indicate SSL is not supported
-		conn.Write([]byte("N"))
+		_, _ = conn.Write([]byte("N"))
 		// Wait for the actual startup message
 		startupMsg, err = backend.ReceiveStartupMessage()
 		if err != nil {
@@ -102,7 +102,7 @@ func handleConnection(conn net.Conn) {
 				Code:     "0A000",
 				Message:  fmt.Sprintf("unsupported message type: %T", msg),
 			})
-			backend.Flush()
+			_ = backend.Flush()
 		}
 	}
 }
