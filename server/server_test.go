@@ -10,6 +10,13 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// @TestDescription Verifies the server starts on a random TCP port, completes the full PostgreSQL wire
+// protocol startup handshake including AuthenticationOk and ParameterStatus messages, and responds
+// successfully to pgx client ping requests.
+// @TestType integration
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID cfd2657f-dd72-44b7-b4bc-d5043a8843a2
 func TestServer_ConnectAndPing(t *testing.T) {
 	// Create and start server on random port
 	srv := New("")
@@ -55,6 +62,12 @@ func TestServer_ConnectAndPing(t *testing.T) {
 	t.Log("Successfully connected and pinged the server!")
 }
 
+// @TestDescription Verifies the server creates independent goroutine-per-connection handlers that can
+// process 5 or more concurrent pgx client connections simultaneously without interference between sessions.
+// @TestType integration
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 0610d949-a304-42a8-974b-b53de9eec05e
 func TestServer_MultipleConnections(t *testing.T) {
 	// Create and start server on random port
 	srv := New("")
@@ -89,7 +102,12 @@ func TestServer_MultipleConnections(t *testing.T) {
 	t.Logf("Successfully handled %d concurrent connections", numConns)
 }
 
-// @test Server returns PostgreSQL error for malformed SQL
+// @TestDescription Send malformed SQL statement via pgx and verify it returns a PostgreSQL
+// ErrorResponse with SQLSTATE 42601 (syntax_error).
+// @TestType integration
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 4b891549-0f59-437b-b162-97d10ecdc24a
 func TestServer_MalformedSQL(t *testing.T) {
 	// Create and start server on random port
 	srv := New("")
@@ -121,7 +139,12 @@ func TestServer_MalformedSQL(t *testing.T) {
 	t.Logf("Got expected error for malformed SQL: %v", err)
 }
 
-// @test Server returns PostgreSQL error for unsupported statements
+// @TestDescription Send unsupported SQL statement via pgx and verify it returns a descriptive
+// PostgreSQL ErrorResponse with appropriate SQLSTATE code (0A000 - feature_not_supported).
+// @TestType integration
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 0a48b4b0-dec8-42ad-ad6c-e1671edc5104
 func TestServer_UnsupportedStatement(t *testing.T) {
 	// Create and start server on random port
 	srv := New("")

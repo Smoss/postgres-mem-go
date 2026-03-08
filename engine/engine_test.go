@@ -7,7 +7,12 @@ import (
 	"github.com/smoss/postgres-mem-go/parser"
 )
 
-// @test Engine dispatches SELECT statements to the SELECT executor
+// @TestDescription Verifies engine type-switch correctly dispatches each AST type to its designated
+// executor function (SELECT, INSERT, UPDATE, DELETE, CREATE TABLE, DROP TABLE, BEGIN, COMMIT, ROLLBACK).
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID b732a74c-5c52-4f15-a9a8-a76579a991ca
 func TestEngineDispatchSelect(t *testing.T) {
 	eng := New()
 	eng.Start()
@@ -35,7 +40,12 @@ func TestEngineDispatchSelect(t *testing.T) {
 	}
 }
 
-// @test Engine dispatches INSERT statements to the INSERT executor
+// @TestDescription Verifies the Engine correctly dispatches INSERT statements via the Request channel
+// to the executeInsert handler function and returns the expected response through the Response channel.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 463c902a-e6a3-4394-adb7-95d2252cdad2
 func TestEngineDispatchInsert(t *testing.T) {
 	eng := New()
 	eng.Start()
@@ -62,7 +72,12 @@ func TestEngineDispatchInsert(t *testing.T) {
 	}
 }
 
-// @test Engine dispatches UPDATE statements to the UPDATE executor
+// @TestDescription Verifies the Engine correctly dispatches UPDATE statements via the Request channel
+// to the executeUpdate handler function and returns the expected response through the Response channel.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID f3a3dcbf-f644-4936-8cef-97f008fa4cb7
 func TestEngineDispatchUpdate(t *testing.T) {
 	eng := New()
 	eng.Start()
@@ -89,7 +104,12 @@ func TestEngineDispatchUpdate(t *testing.T) {
 	}
 }
 
-// @test Engine dispatches DELETE statements to the DELETE executor
+// @TestDescription Verifies the Engine correctly dispatches DELETE statements via the Request channel
+// to the executeDelete handler function and returns the expected response through the Response channel.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 3c379244-0006-4866-9574-302b5a9a8170
 func TestEngineDispatchDelete(t *testing.T) {
 	eng := New()
 	eng.Start()
@@ -116,7 +136,12 @@ func TestEngineDispatchDelete(t *testing.T) {
 	}
 }
 
-// @test Engine dispatches CREATE TABLE statements to the DDL executor
+// @TestDescription Verifies the Engine correctly dispatches CREATE TABLE statements via the Request channel
+// to the executeCreateTable handler function and returns the expected response through the Response channel.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 0960f164-2c45-415f-8247-a5423508b250
 func TestEngineDispatchCreateTable(t *testing.T) {
 	eng := New()
 	eng.Start()
@@ -143,7 +168,12 @@ func TestEngineDispatchCreateTable(t *testing.T) {
 	}
 }
 
-// @test Engine dispatches DROP TABLE statements to the DDL executor
+// @TestDescription Verifies the Engine correctly dispatches DROP TABLE statements via the Request channel
+// to the executeDropTable handler function and returns the expected response through the Response channel.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID e304ec2f-0236-471b-af42-b518dcd8de8c
 func TestEngineDispatchDropTable(t *testing.T) {
 	eng := New()
 	eng.Start()
@@ -170,7 +200,12 @@ func TestEngineDispatchDropTable(t *testing.T) {
 	}
 }
 
-// @test Engine dispatches BEGIN statements to the transaction executor
+// @TestDescription Verifies the Engine correctly dispatches BEGIN TRANSACTION statements via the Request channel
+// to the executeBegin handler function and returns the expected response through the Response channel.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 0f29becf-b058-4bb0-bcc4-583071ea4558
 func TestEngineDispatchBegin(t *testing.T) {
 	eng := New()
 	eng.Start()
@@ -197,7 +232,12 @@ func TestEngineDispatchBegin(t *testing.T) {
 	}
 }
 
-// @test Engine dispatches COMMIT statements to the transaction executor
+// @TestDescription Verifies the Engine correctly dispatches COMMIT statements via the Request channel
+// to the executeCommit handler function and returns the expected response through the Response channel.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 33217f30-0708-429e-b2c7-14a84c82e5bf
 func TestEngineDispatchCommit(t *testing.T) {
 	eng := New()
 	eng.Start()
@@ -224,7 +264,12 @@ func TestEngineDispatchCommit(t *testing.T) {
 	}
 }
 
-// @test Engine dispatches ROLLBACK statements to the transaction executor
+// @TestDescription Verifies the Engine correctly dispatches ROLLBACK statements via the Request channel
+// to the executeRollback handler function and returns the expected response through the Response channel.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID c9f1e5ef-e667-4bbf-8ca6-1cdf07f6ee45
 func TestEngineDispatchRollback(t *testing.T) {
 	eng := New()
 	eng.Start()
@@ -251,7 +296,12 @@ func TestEngineDispatchRollback(t *testing.T) {
 	}
 }
 
-// @test Engine returns error for unsupported statement types
+// @TestDescription Verifies the Engine dispatch function returns a clear error message indicating the
+// statement type is not supported when receiving an unhandled AST node type like tree.Grant.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID a930058c-560e-4f5f-b36b-eada6a34d065
 func TestEngineUnsupportedStatement(t *testing.T) {
 	eng := New()
 	eng.Start()

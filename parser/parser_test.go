@@ -6,7 +6,12 @@ import (
 	"github.com/cockroachdb/cockroachdb-parser/pkg/sql/sem/tree"
 )
 
-// @test ParseSelect parses a simple SELECT statement into a typed AST
+// @TestDescription Verifies parser.Parse returns correct tree.Statement types for SELECT, INSERT, UPDATE,
+// DELETE, CREATE TABLE, DROP TABLE, BEGIN, COMMIT, ROLLBACK.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID d826c8d4-3ae8-46f2-88ed-e2844a2098fb
 func TestParseSelect(t *testing.T) {
 	sql := "SELECT id, name FROM users WHERE active = true"
 	stmt, err := Parse(sql)
@@ -20,7 +25,12 @@ func TestParseSelect(t *testing.T) {
 	}
 }
 
-// @test ParseInsert parses an INSERT statement into a typed AST
+// @TestDescription Verifies parser.Parse correctly parses INSERT INTO statements and returns a typed
+// tree.Insert AST node containing table name, column list, and values information.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID cdbb3576-9d62-4c03-99f3-a58e48a92b69
 func TestParseInsert(t *testing.T) {
 	sql := "INSERT INTO users (id, name) VALUES (1, 'Alice')"
 	stmt, err := Parse(sql)
@@ -34,7 +44,12 @@ func TestParseInsert(t *testing.T) {
 	}
 }
 
-// @test ParseUpdate parses an UPDATE statement into a typed AST
+// @TestDescription Verifies parser.Parse correctly parses UPDATE statements and returns a typed
+// tree.Update AST node containing target table, SET clause assignments, and WHERE condition.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 303bddb0-0d54-492b-b0e3-a3972875ff34
 func TestParseUpdate(t *testing.T) {
 	sql := "UPDATE users SET name = 'Bob' WHERE id = 1"
 	stmt, err := Parse(sql)
@@ -48,7 +63,12 @@ func TestParseUpdate(t *testing.T) {
 	}
 }
 
-// @test ParseDelete parses a DELETE statement into a typed AST
+// @TestDescription Verifies parser.Parse correctly parses DELETE FROM statements and returns a typed
+// tree.Delete AST node containing table reference and optional WHERE clause.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 67013902-b40a-4b91-b218-8fb2b6be4c25
 func TestParseDelete(t *testing.T) {
 	sql := "DELETE FROM users WHERE id = 1"
 	stmt, err := Parse(sql)
@@ -62,7 +82,12 @@ func TestParseDelete(t *testing.T) {
 	}
 }
 
-// @test ParseCreateTable parses a CREATE TABLE statement into a typed AST
+// @TestDescription Verifies parser.Parse correctly parses CREATE TABLE statements and returns a typed
+// tree.CreateTable AST node containing table name, column definitions with types, and constraints.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID b90eeaeb-3d65-46a6-b951-3412a05bcad5
 func TestParseCreateTable(t *testing.T) {
 	sql := "CREATE TABLE users (id INT PRIMARY KEY, name TEXT)"
 	stmt, err := Parse(sql)
@@ -76,7 +101,12 @@ func TestParseCreateTable(t *testing.T) {
 	}
 }
 
-// @test ParseDropTable parses a DROP TABLE statement into a typed AST
+// @TestDescription Verifies parser.Parse correctly parses DROP TABLE statements and returns a typed
+// tree.DropTable AST node containing the target table name and IF EXISTS flag.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 5a9bee1a-3d6d-440b-b3ea-daae3fbd4276
 func TestParseDropTable(t *testing.T) {
 	sql := "DROP TABLE users"
 	stmt, err := Parse(sql)
@@ -90,7 +120,12 @@ func TestParseDropTable(t *testing.T) {
 	}
 }
 
-// @test ParseBegin parses a BEGIN statement into a typed AST
+// @TestDescription Verifies parser.Parse correctly parses BEGIN transaction statements and returns a typed
+// tree.BeginTransaction AST node with transaction mode information.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 44501aae-97c8-4904-bcd9-20e82bc6bb5f
 func TestParseBegin(t *testing.T) {
 	sql := "BEGIN"
 	stmt, err := Parse(sql)
@@ -104,7 +139,12 @@ func TestParseBegin(t *testing.T) {
 	}
 }
 
-// @test ParseCommit parses a COMMIT statement into a typed AST
+// @TestDescription Verifies parser.Parse correctly parses COMMIT transaction statements and returns a typed
+// tree.CommitTransaction AST node.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 2de85b64-3def-4c41-870f-a2590909f93c
 func TestParseCommit(t *testing.T) {
 	sql := "COMMIT"
 	stmt, err := Parse(sql)
@@ -118,7 +158,12 @@ func TestParseCommit(t *testing.T) {
 	}
 }
 
-// @test ParseRollback parses a ROLLBACK statement into a typed AST
+// @TestDescription Verifies parser.Parse correctly parses ROLLBACK transaction statements and returns a typed
+// tree.RollbackTransaction AST node.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 0ba5d157-32a2-40e4-9ffd-89ae8d397cf1
 func TestParseRollback(t *testing.T) {
 	sql := "ROLLBACK"
 	stmt, err := Parse(sql)
@@ -132,7 +177,12 @@ func TestParseRollback(t *testing.T) {
 	}
 }
 
-// @test ParseMalformedSQL returns an error for invalid SQL
+// @TestDescription Verifies parser.Parse returns a descriptive error when given invalid or incomplete
+// SQL syntax, such as SELECT * FROM with no table name.
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 6a278fd7-4f18-4f05-81ab-1a3afbe1ddea
 func TestParseMalformedSQL(t *testing.T) {
 	sql := "SELECT * FROM" // Incomplete statement
 	_, err := Parse(sql)
