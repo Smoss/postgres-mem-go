@@ -25,7 +25,7 @@ run:
 
 # Run all tests
 test:
-	go test -v ./...
+	go test ./...
 
 # Run tests with race detection
 test-race:

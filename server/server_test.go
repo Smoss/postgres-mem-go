@@ -121,8 +121,8 @@ func TestServer_MalformedSQL(t *testing.T) {
 	t.Logf("Got expected error for malformed SQL: %v", err)
 }
 
-// @test Server returns PostgreSQL error for unsupported statements
-func TestServer_UnsupportedStatement(t *testing.T) {
+// @test Server executes CREATE TABLE and DROP TABLE statements
+func TestServer_CreateAndDropTable(t *testing.T) {
 	// Create and start server on random port
 	srv := New("")
 	if err := srv.Start(); err != nil {
@@ -144,11 +144,49 @@ func TestServer_UnsupportedStatement(t *testing.T) {
 	}
 	defer func() { _ = conn.Close(context.Background()) }()
 
-	// Execute a valid but not-yet-implemented statement
+	// Execute CREATE TABLE - should now succeed
 	_, err = conn.Exec(ctx, "CREATE TABLE test (id INT)")
-	if err == nil {
-		t.Fatal("Expected error for unimplemented CREATE TABLE, got nil")
+	if err != nil {
+		t.Fatalf("CREATE TABLE should succeed, got error: %v", err)
 	}
 
-	t.Logf("Got expected error for unimplemented statement: %v", err)
+	t.Log("Successfully created table")
+
+	// Execute DROP TABLE - should succeed
+	_, err = conn.Exec(ctx, "DROP TABLE test")
+	if err != nil {
+		t.Fatalf("DROP TABLE should succeed, got error: %v", err)
+	}
+
+	t.Log("Successfully dropped table")
+
+	// Test IF NOT EXISTS - should not error on duplicate
+	_, err = conn.Exec(ctx, "CREATE TABLE test2 (id INT)")
+	if err != nil {
+		t.Fatalf("First CREATE TABLE should succeed: %v", err)
+	}
+
+	_, err = conn.Exec(ctx, "CREATE TABLE IF NOT EXISTS test2 (id INT)")
+	if err != nil {
+		t.Fatalf(
+			"CREATE TABLE IF NOT EXISTS should not error on duplicate: %v",
+			err,
+		)
+	}
+
+	t.Log("CREATE TABLE IF NOT EXISTS handled correctly")
+
+	// Test IF EXISTS - should not error on missing table
+	_, err = conn.Exec(ctx, "DROP TABLE IF EXISTS nonexistent_table")
+	if err != nil {
+		t.Fatalf(
+			"DROP TABLE IF EXISTS should not error on missing table: %v",
+			err,
+		)
+	}
+
+	t.Log("DROP TABLE IF EXISTS handled correctly")
+
+	// Clean up
+	_, _ = conn.Exec(ctx, "DROP TABLE IF EXISTS test2")
 }

@@ -34,6 +34,7 @@ type Engine struct {
 	requestCh chan Request
 	ctx       context.Context
 	cancel    context.CancelFunc
+	catalog   *Catalog
 }
 
 // New creates a new Engine.
@@ -43,6 +44,7 @@ func New() *Engine {
 		requestCh: make(chan Request),
 		ctx:       ctx,
 		cancel:    cancel,
+		catalog:   NewCatalog(),
 	}
 }
 
@@ -84,9 +86,9 @@ func (e *Engine) dispatch(stmt tree.Statement) Response {
 	case *tree.Delete:
 		return executeDelete(s)
 	case *tree.CreateTable:
-		return executeCreateTable(s)
+		return executeCreateTable(s, e.catalog)
 	case *tree.DropTable:
-		return executeDropTable(s)
+		return executeDropTable(s, e.catalog)
 	case *tree.BeginTransaction:
 		return executeBegin(s)
 	case *tree.CommitTransaction:
