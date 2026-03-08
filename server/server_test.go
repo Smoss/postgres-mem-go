@@ -88,3 +88,67 @@ func TestServer_MultipleConnections(t *testing.T) {
 
 	t.Logf("Successfully handled %d concurrent connections", numConns)
 }
+
+// @test Server returns PostgreSQL error for malformed SQL
+func TestServer_MalformedSQL(t *testing.T) {
+	// Create and start server on random port
+	srv := New("")
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer func() { _ = srv.Stop() }()
+
+	addr := srv.Addr()
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=postgres dbname=postgres sslmode=disable",
+		addr.(*net.TCPAddr).IP.String(),
+		addr.(*net.TCPAddr).Port,
+	)
+
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer func() { _ = conn.Close(context.Background()) }()
+
+	// Execute malformed SQL
+	_, err = conn.Exec(ctx, "SELECT * FROM") // Incomplete statement
+	if err == nil {
+		t.Fatal("Expected error for malformed SQL, got nil")
+	}
+
+	t.Logf("Got expected error for malformed SQL: %v", err)
+}
+
+// @test Server returns PostgreSQL error for unsupported statements
+func TestServer_UnsupportedStatement(t *testing.T) {
+	// Create and start server on random port
+	srv := New("")
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer func() { _ = srv.Stop() }()
+
+	addr := srv.Addr()
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=postgres dbname=postgres sslmode=disable",
+		addr.(*net.TCPAddr).IP.String(),
+		addr.(*net.TCPAddr).Port,
+	)
+
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer func() { _ = conn.Close(context.Background()) }()
+
+	// Execute a valid but not-yet-implemented statement
+	_, err = conn.Exec(ctx, "CREATE TABLE test (id INT)")
+	if err == nil {
+		t.Fatal("Expected error for unimplemented CREATE TABLE, got nil")
+	}
+
+	t.Logf("Got expected error for unimplemented statement: %v", err)
+}

@@ -6,6 +6,8 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+
+	"github.com/smoss/postgres-mem-go/engine"
 )
 
 // Server is a TCP server that accepts PostgreSQL wire protocol connections.
@@ -16,6 +18,7 @@ type Server struct {
 	closed   atomic.Bool
 	ctx      context.Context
 	cancel   context.CancelFunc
+	engine   *engine.Engine
 }
 
 // New creates a new Server with the given address.
@@ -29,6 +32,7 @@ func New(addr string) *Server {
 		addr:   addr,
 		ctx:    ctx,
 		cancel: cancel,
+		engine: engine.New(),
 	}
 }
 
@@ -49,6 +53,9 @@ func (s *Server) Start() error {
 	}
 	s.listener = listener
 
+	// Start the query engine
+	s.engine.Start()
+
 	s.wg.Add(1)
 	go s.acceptLoop()
 
@@ -62,6 +69,7 @@ func (s *Server) Stop() error {
 		if s.listener != nil {
 			_ = s.listener.Close()
 		}
+		s.engine.Stop()
 	}
 	s.wg.Wait()
 	return nil
@@ -82,7 +90,7 @@ func (s *Server) acceptLoop() {
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
-			handleConnection(conn)
+			handleConnection(conn, s.engine)
 		}()
 	}
 }
