@@ -50,3 +50,13 @@ clean:
 
 # Run all checks (fmt, lint, test)
 check: fmt lint test
+
+
+tests-dry-run:
+	juris-go-parser dry-run .
+
+tests-generate:
+	juris-go-parser generate -default-system "postgres-mem-go" .
+
+tests-upload:
+	juris-go-parser upload --endpoint http://127.0.0.1:8000 .

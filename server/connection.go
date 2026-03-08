@@ -5,10 +5,12 @@ import (
 	"net"
 
 	"github.com/jackc/pgx/v5/pgproto3"
+	"github.com/smoss/postgres-mem-go/engine"
+	"github.com/smoss/postgres-mem-go/parser"
 )
 
 // handleConnection handles a single client connection.
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, eng *engine.Engine) {
 	defer func() { _ = conn.Close() }()
 
 	backend := pgproto3.NewBackend(conn, conn)
@@ -90,7 +92,7 @@ func handleConnection(conn net.Conn) {
 
 		switch m := msg.(type) {
 		case *pgproto3.Query:
-			if err := handleQuery(backend, m.String); err != nil {
+			if err := handleQuery(backend, m.String, eng); err != nil {
 				return
 			}
 		case *pgproto3.Terminate:
@@ -108,12 +110,56 @@ func handleConnection(conn net.Conn) {
 }
 
 // handleQuery processes a simple query and returns appropriate responses.
-func handleQuery(backend *pgproto3.Backend, sql string) error {
-	// For Phase 1, we accept any query and return empty CommandComplete
-	// This is enough for pgx.Ping() to work
+func handleQuery(backend *pgproto3.Backend, sql string, eng *engine.Engine) error {
+	// Parse the SQL statement
+	stmt, err := parser.Parse(sql)
+	if err != nil {
+		// Send PostgreSQL error response for syntax error
+		backend.Send(&pgproto3.ErrorResponse{
+			Severity: "ERROR",
+			Code:     "42601", // syntax_error
+			Message:  err.Error(),
+		})
+		backend.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
+		return backend.Flush()
+	}
 
-	// Send CommandComplete with tag (e.g., "SELECT 0" or just empty for now)
-	// For ping queries, we can respond with a basic acknowledgment
+	// Handle empty query (nil statement) - return empty CommandComplete
+	// This is needed for pgx.Ping() which may send empty queries
+	if stmt == nil {
+		backend.Send(&pgproto3.CommandComplete{
+			CommandTag: []byte("SELECT 0"),
+		})
+		backend.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
+		return backend.Flush()
+	}
+
+	// Submit the parsed statement to the engine
+	respCh := make(chan engine.Response, 1)
+	eng.Submit(engine.Request{
+		Stmt:       stmt,
+		ConnID:     0, // TODO: assign connection IDs
+		ResponseCh: respCh,
+	})
+
+	// Wait for the response
+	resp := <-respCh
+
+	// Handle engine response
+	if resp.Error != nil {
+		// Determine SQLSTATE based on error type
+		code := "0A000" // feature_not_supported (default for Phase 2 stubs)
+		backend.Send(&pgproto3.ErrorResponse{
+			Severity: "ERROR",
+			Code:     code,
+			Message:  resp.Error.Error(),
+		})
+		backend.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
+		return backend.Flush()
+	}
+
+	// For Phase 2, return empty CommandComplete for successful parsing
+	// Phase 4+ will return actual row data
 	backend.Send(&pgproto3.CommandComplete{
 		CommandTag: []byte("SELECT 0"),
 	})
