@@ -135,11 +135,14 @@ func TestEngineDispatchCreateTable(t *testing.T) {
 	})
 
 	resp := <-respCh
-	if resp.Error == nil {
-		t.Fatal("Expected error for unimplemented CREATE TABLE")
+	// CREATE TABLE is now implemented - should succeed
+	if resp.Error != nil {
+		t.Fatalf("Expected success for CREATE TABLE, got error: %v", resp.Error)
 	}
-	if resp.Error.Error() != "CREATE TABLE not yet implemented" {
-		t.Fatalf("Unexpected error: %v", resp.Error)
+
+	// Verify table was created in catalog
+	if !eng.catalog.TableExists("test") {
+		t.Fatal("Expected table to be created in catalog")
 	}
 }
 
@@ -149,24 +152,51 @@ func TestEngineDispatchDropTable(t *testing.T) {
 	eng.Start()
 	defer eng.Stop()
 
-	stmt, err := parser.Parse("DROP TABLE test")
+	// First create a table
+	createStmt, err := parser.Parse("CREATE TABLE test (id INT)")
 	if err != nil {
-		t.Fatalf("Failed to parse: %v", err)
+		t.Fatalf("Failed to parse CREATE: %v", err)
 	}
 
 	respCh := make(chan Response, 1)
+	eng.Submit(Request{
+		Stmt:       createStmt,
+		ConnID:     1,
+		ResponseCh: respCh,
+	})
+
+	resp := <-respCh
+	if resp.Error != nil {
+		t.Fatalf("Failed to create table: %v", resp.Error)
+	}
+
+	// Verify table exists
+	if !eng.catalog.TableExists("test") {
+		t.Fatal("Expected table to be created")
+	}
+
+	// Now drop the table
+	stmt, err := parser.Parse("DROP TABLE test")
+	if err != nil {
+		t.Fatalf("Failed to parse DROP: %v", err)
+	}
+
+	respCh = make(chan Response, 1)
 	eng.Submit(Request{
 		Stmt:       stmt,
 		ConnID:     1,
 		ResponseCh: respCh,
 	})
 
-	resp := <-respCh
-	if resp.Error == nil {
-		t.Fatal("Expected error for unimplemented DROP TABLE")
+	resp = <-respCh
+	// DROP TABLE is now implemented - should succeed
+	if resp.Error != nil {
+		t.Fatalf("Expected success for DROP TABLE, got error: %v", resp.Error)
 	}
-	if resp.Error.Error() != "DROP TABLE not yet implemented" {
-		t.Fatalf("Unexpected error: %v", resp.Error)
+
+	// Verify table was dropped
+	if eng.catalog.TableExists("test") {
+		t.Fatal("Expected table to be dropped from catalog")
 	}
 }
 

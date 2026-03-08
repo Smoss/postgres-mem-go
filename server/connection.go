@@ -110,7 +110,11 @@ func handleConnection(conn net.Conn, eng *engine.Engine) {
 }
 
 // handleQuery processes a simple query and returns appropriate responses.
-func handleQuery(backend *pgproto3.Backend, sql string, eng *engine.Engine) error {
+func handleQuery(
+	backend *pgproto3.Backend,
+	sql string,
+	eng *engine.Engine,
+) error {
 	// Parse the SQL statement
 	stmt, err := parser.Parse(sql)
 	if err != nil {
