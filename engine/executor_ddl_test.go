@@ -7,7 +7,11 @@ import (
 	"github.com/smoss/postgres-mem-go/parser"
 )
 
-// @test ExecuteCreateTable creates a table in the catalog
+// @TestDescription Execute CREATE TABLE statement and verify table is created in the in-memory catalog with correct columns
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 1a719149-f5a9-4df2-9aa7-302c4f8675a7
 func TestExecuteCreateTable(t *testing.T) {
 	catalog := NewCatalog()
 
@@ -42,7 +46,11 @@ func TestExecuteCreateTable(t *testing.T) {
 	}
 }
 
-// @test ExecuteCreateTableIfNotExists does not error on duplicate
+// @TestDescription Execute CREATE TABLE IF NOT EXISTS twice for the same table and verify second call does not error
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 5015069e-700e-4574-83b8-7368fc458e69
 func TestExecuteCreateTableIfNotExists(t *testing.T) {
 	catalog := NewCatalog()
 
@@ -116,7 +124,11 @@ func TestExecuteCreateTableDuplicateError(t *testing.T) {
 	}
 }
 
-// @test ExecuteCreateTableWithConstraints records NOT NULL and DEFAULT
+// @TestDescription Execute CREATE TABLE with NOT NULL and DEFAULT constraints and verify they are recorded in catalog metadata
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 4352a5d2-3e8c-4147-81d9-c3d10d9b7804
 func TestExecuteCreateTableWithConstraints(t *testing.T) {
 	catalog := NewCatalog()
 
@@ -168,7 +180,11 @@ func TestExecuteCreateTableWithConstraints(t *testing.T) {
 	}
 }
 
-// @test ExecuteCreateTableWithPrimaryKey records PRIMARY KEY constraint
+// @TestDescription Execute CREATE TABLE with inline PRIMARY KEY constraint and verify it is recorded in catalog metadata
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 6fcffda5-a963-4ec7-84f1-ede851964366
 func TestExecuteCreateTableWithPrimaryKey(t *testing.T) {
 	catalog := NewCatalog()
 
@@ -360,7 +376,11 @@ func TestExecuteCreateTableWithTypeAliases(t *testing.T) {
 	}
 }
 
-// @test ExecuteDropTable removes a table from the catalog
+// @TestDescription Execute DROP TABLE statement and verify table and its metadata are removed from the catalog
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 9fa3b8cc-c62f-4701-ade1-dcec3bd8a208
 func TestExecuteDropTable(t *testing.T) {
 	catalog := NewCatalog()
 
@@ -401,7 +421,11 @@ func TestExecuteDropTable(t *testing.T) {
 	}
 }
 
-// @test ExecuteDropTableIfExists does not error on missing table
+// @TestDescription Execute DROP TABLE IF EXISTS on a non-existent table and verify it returns without error
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID aceb999a-94df-4be9-8e3b-7b987bfdc11d
 func TestExecuteDropTableIfExists(t *testing.T) {
 	catalog := NewCatalog()
 
@@ -481,7 +505,11 @@ func TestExecuteDropTableMultiple(t *testing.T) {
 	}
 }
 
-// @test ExecuteCreateTableWithAllPostgreSQLTypes creates table with all supported types
+// @TestDescription Execute CREATE TABLE with all supported PostgreSQL types and verify they map to correct OIDs and Go types
+// @TestType unit
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 198494c5-9921-4bbc-b7e1-c73ed9503221
 func TestExecuteCreateTableWithAllPostgreSQLTypes(t *testing.T) {
 	catalog := NewCatalog()
 
