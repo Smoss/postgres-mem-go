@@ -11,6 +11,7 @@ type Table struct {
 	Name       string
 	Columns    []TableColumn
 	PrimaryKey []string
+	Rows       [][]interface{} // In-memory row storage
 }
 
 // TableColumn represents a column in a table.
@@ -107,4 +108,102 @@ func (c *Catalog) TableExists(name string) bool {
 
 	_, exists := c.tables[name]
 	return exists
+}
+
+// InsertRow inserts a row into a table.
+// The values slice must match the number of columns in the table.
+func (c *Catalog) InsertRow(tableName string, values []interface{}) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	table, exists := c.tables[tableName]
+	if !exists {
+		return fmt.Errorf("table does not exist: %s", tableName)
+	}
+
+	if len(values) != len(table.Columns) {
+		return fmt.Errorf(
+			"value count mismatch: expected %d, got %d",
+			len(table.Columns),
+			len(values),
+		)
+	}
+
+	table.Rows = append(table.Rows, values)
+	return nil
+}
+
+// GetAllRows returns all rows from a table.
+func (c *Catalog) GetAllRows(tableName string) ([][]interface{}, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	table, exists := c.tables[tableName]
+	if !exists {
+		return nil, fmt.Errorf("table does not exist: %s", tableName)
+	}
+
+	// Return a copy to prevent external modification
+	result := make([][]interface{}, len(table.Rows))
+	for i, row := range table.Rows {
+		result[i] = make([]interface{}, len(row))
+		copy(result[i], row)
+	}
+	return result, nil
+}
+
+// DeleteRows removes rows that match the predicate.
+// Returns the number of rows deleted.
+func (c *Catalog) DeleteRows(
+	tableName string,
+	predicate func([]interface{}) bool,
+) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	table, exists := c.tables[tableName]
+	if !exists {
+		return 0, fmt.Errorf("table does not exist: %s", tableName)
+	}
+
+	var newRows [][]interface{}
+	deletedCount := 0
+
+	for _, row := range table.Rows {
+		if predicate(row) {
+			deletedCount++
+		} else {
+			newRows = append(newRows, row)
+		}
+	}
+
+	table.Rows = newRows
+	return deletedCount, nil
+}
+
+// UpdateRows modifies rows that match the predicate using the updater function.
+// Returns the number of rows updated.
+func (c *Catalog) UpdateRows(
+	tableName string,
+	predicate func([]interface{}) bool,
+	updater func([]interface{}) []interface{},
+) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	table, exists := c.tables[tableName]
+	if !exists {
+		return 0, fmt.Errorf("table does not exist: %s", tableName)
+	}
+
+	updatedCount := 0
+
+	for i, row := range table.Rows {
+		if predicate(row) {
+			table.Rows[i] = updater(row)
+			updatedCount++
+		}
+	}
+
+	return updatedCount, nil
 }

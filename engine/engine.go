@@ -78,13 +78,13 @@ func (e *Engine) run() {
 func (e *Engine) dispatch(stmt tree.Statement) Response {
 	switch s := stmt.(type) {
 	case *tree.Select:
-		return executeSelect(s)
+		return executeSelect(s, e.catalog)
 	case *tree.Insert:
-		return executeInsert(s)
+		return executeInsert(s, e.catalog)
 	case *tree.Update:
-		return executeUpdate(s)
+		return executeUpdate(s, e.catalog)
 	case *tree.Delete:
-		return executeDelete(s)
+		return executeDelete(s, e.catalog)
 	case *tree.CreateTable:
 		return executeCreateTable(s, e.catalog)
 	case *tree.DropTable:

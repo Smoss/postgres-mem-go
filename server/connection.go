@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/cockroachdb/cockroachdb-parser/pkg/sql/sem/tree"
 	"github.com/jackc/pgx/v5/pgproto3"
 	"github.com/smoss/postgres-mem-go/engine"
 	"github.com/smoss/postgres-mem-go/parser"
@@ -73,6 +74,10 @@ func handleConnection(conn net.Conn, eng *engine.Engine) {
 	backend.Send(&pgproto3.ParameterStatus{
 		Name:  "session_authorization",
 		Value: "postgres",
+	})
+	backend.Send(&pgproto3.ParameterStatus{
+		Name:  "standard_conforming_strings",
+		Value: "on",
 	})
 
 	// Send ReadyForQuery to indicate we're ready for queries
@@ -162,14 +167,96 @@ func handleQuery(
 		return backend.Flush()
 	}
 
-	// For Phase 2, return empty CommandComplete for successful parsing
-	// Phase 4+ will return actual row data
+	// Determine the statement type for CommandComplete tag
+	commandTag := generateCommandTag(stmt, resp)
+
+	// Send RowDescription and DataRow messages for SELECT results
+	if len(resp.Rows) > 0 && len(resp.Columns) > 0 {
+		// Send RowDescription
+		fields := make([]pgproto3.FieldDescription, len(resp.Columns))
+		for i, col := range resp.Columns {
+			fields[i] = pgproto3.FieldDescription{
+				Name:                 []byte(col.Name),
+				TableOID:             0,
+				TableAttributeNumber: 0,
+				DataTypeOID:          col.TypeOID,
+				DataTypeSize:         -1, // Variable size
+				TypeModifier:         -1,
+				Format:               0, // Text format
+			}
+		}
+		backend.Send(&pgproto3.RowDescription{Fields: fields})
+
+		// Send DataRow messages
+		for _, row := range resp.Rows {
+			values := make([][]byte, len(row))
+			for i, val := range row {
+				values[i] = formatValue(val)
+			}
+			backend.Send(&pgproto3.DataRow{Values: values})
+		}
+	}
+
+	// Send CommandComplete
 	backend.Send(&pgproto3.CommandComplete{
-		CommandTag: []byte("SELECT 0"),
+		CommandTag: []byte(commandTag),
 	})
 
 	// Send ReadyForQuery to indicate we're ready for more queries
 	backend.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
 
 	return backend.Flush()
+}
+
+// generateCommandTag generates the appropriate CommandComplete tag based on statement type.
+func generateCommandTag(stmt interface{}, resp engine.Response) string {
+	switch stmt.(type) {
+	case *tree.Select:
+		return fmt.Sprintf("SELECT %d", resp.RowsAffected)
+	case *tree.Insert:
+		return fmt.Sprintf("INSERT 0 %d", resp.RowsAffected)
+	case *tree.Update:
+		return fmt.Sprintf("UPDATE %d", resp.RowsAffected)
+	case *tree.Delete:
+		return fmt.Sprintf("DELETE %d", resp.RowsAffected)
+	case *tree.CreateTable:
+		return "CREATE TABLE"
+	case *tree.DropTable:
+		return "DROP TABLE"
+	case *tree.BeginTransaction:
+		return "BEGIN"
+	case *tree.CommitTransaction:
+		return "COMMIT"
+	case *tree.RollbackTransaction:
+		return "ROLLBACK"
+	default:
+		return fmt.Sprintf("SELECT %d", resp.RowsAffected)
+	}
+}
+
+// formatValue formats a Go value as a byte slice for the wire protocol.
+func formatValue(val interface{}) []byte {
+	if val == nil {
+		return nil // NULL value
+	}
+
+	switch v := val.(type) {
+	case int32:
+		return []byte(fmt.Sprintf("%d", v))
+	case int64:
+		return []byte(fmt.Sprintf("%d", v))
+	case float64:
+		return []byte(fmt.Sprintf("%g", v))
+	case string:
+		return []byte(v)
+	case bool:
+		if v {
+			return []byte("t")
+		}
+		return []byte("f")
+	case []byte:
+		return v
+	default:
+		return []byte(fmt.Sprintf("%v", v))
+	}
 }

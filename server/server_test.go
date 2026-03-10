@@ -190,3 +190,128 @@ func TestServer_CreateAndDropTable(t *testing.T) {
 	// Clean up
 	_, _ = conn.Exec(ctx, "DROP TABLE IF EXISTS test2")
 }
+
+// @TestDescription INSERT rows then SELECT them back with correct values
+// @TestType integration
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID 5919cc1e-bc72-4a39-afd8-8a8560dee1c8
+func TestServer_InsertThenSelectBack(t *testing.T) {
+	// Create and start server on random port
+	srv := New("")
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer func() { _ = srv.Stop() }()
+
+	addr := srv.Addr()
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=postgres dbname=postgres sslmode=disable",
+		addr.(*net.TCPAddr).IP.String(),
+		addr.(*net.TCPAddr).Port,
+	)
+
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer func() { _ = conn.Close(context.Background()) }()
+
+	// Create a table with INT and TEXT columns (FLOAT8 support is limited)
+	_, err = conn.Exec(ctx, "CREATE TABLE test_roundtrip (id INT, name TEXT)")
+	if err != nil {
+		t.Fatalf("CREATE TABLE failed: %v", err)
+	}
+
+	// Insert several rows
+	_, err = conn.Exec(
+		ctx,
+		"INSERT INTO test_roundtrip (id, name) VALUES (1, 'Alice')",
+	)
+	if err != nil {
+		t.Fatalf("First INSERT failed: %v", err)
+	}
+	_, err = conn.Exec(
+		ctx,
+		"INSERT INTO test_roundtrip (id, name) VALUES (2, 'Bob')",
+	)
+	if err != nil {
+		t.Fatalf("Second INSERT failed: %v", err)
+	}
+	_, err = conn.Exec(
+		ctx,
+		"INSERT INTO test_roundtrip (id, name) VALUES (3, 'Charlie')",
+	)
+	if err != nil {
+		t.Fatalf("Third INSERT failed: %v", err)
+	}
+
+	// SELECT the rows back using simple protocol (server doesn't support extended protocol)
+	rows, err := conn.Query(
+		ctx,
+		"SELECT id, name FROM test_roundtrip ORDER BY id",
+		pgx.QueryExecModeSimpleProtocol,
+	)
+	if err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	defer rows.Close()
+
+	expectedData := []struct {
+		id   int32
+		name string
+	}{
+		{1, "Alice"},
+		{2, "Bob"},
+		{3, "Charlie"},
+	}
+
+	rowCount := 0
+	for rows.Next() {
+		var id int32
+		var name string
+
+		err := rows.Scan(&id, &name)
+		if err != nil {
+			t.Fatalf("Failed to scan row %d: %v", rowCount, err)
+		}
+
+		if rowCount >= len(expectedData) {
+			t.Fatalf("Unexpected extra row at index %d", rowCount)
+		}
+
+		expected := expectedData[rowCount]
+		if id != expected.id {
+			t.Fatalf(
+				"Row %d: expected id=%d, got %d",
+				rowCount,
+				expected.id,
+				id,
+			)
+		}
+		if name != expected.name {
+			t.Fatalf(
+				"Row %d: expected name='%s', got '%s'",
+				rowCount,
+				expected.name,
+				name,
+			)
+		}
+
+		rowCount++
+	}
+
+	if err := rows.Err(); err != nil {
+		t.Fatalf("Row iteration error: %v", err)
+	}
+
+	if rowCount != 3 {
+		t.Fatalf("Expected 3 rows, got %d", rowCount)
+	}
+
+	t.Log("Successfully inserted and retrieved rows with correct values")
+
+	// Clean up
+	_, _ = conn.Exec(ctx, "DROP TABLE IF EXISTS test_roundtrip")
+}
