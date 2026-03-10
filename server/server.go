@@ -88,9 +88,10 @@ func (s *Server) acceptLoop() {
 		}
 
 		s.wg.Add(1)
+		connID := s.engine.GetNextConnID()
 		go func() {
 			defer s.wg.Done()
-			handleConnection(conn, s.engine)
+			handleConnection(conn, s.engine, connID)
 		}()
 	}
 }

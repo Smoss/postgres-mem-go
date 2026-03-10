@@ -40,7 +40,7 @@ func TestInsertValuesStoresRows(t *testing.T) {
 		t.Fatalf("Expected *tree.Insert, got %T", stmt)
 	}
 
-	resp := executeInsert(insertStmt, catalog)
+	resp := executeInsert(insertStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}
@@ -105,7 +105,7 @@ func TestInsertReturningReturnsData(t *testing.T) {
 		t.Fatalf("Expected *tree.Insert, got %T", stmt)
 	}
 
-	resp := executeInsert(insertStmt, catalog)
+	resp := executeInsert(insertStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}
@@ -174,7 +174,7 @@ func TestSelectTableScan(t *testing.T) {
 		t.Fatalf("Expected *tree.Select, got %T", stmt)
 	}
 
-	resp := executeSelect(selectStmt, catalog)
+	resp := executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}
@@ -214,7 +214,7 @@ func TestSelectWhereClause(t *testing.T) {
 
 	// Test = (equality)
 	stmt, _ := parser.Parse("SELECT id FROM items WHERE id = 2")
-	resp := executeSelect(stmt.(*tree.Select), catalog)
+	resp := executeSelect(stmt.(*tree.Select), catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for =, got %v", resp.Error)
 	}
@@ -224,7 +224,7 @@ func TestSelectWhereClause(t *testing.T) {
 
 	// Test <> (not equal)
 	stmt, _ = parser.Parse("SELECT id FROM items WHERE id <> 2")
-	resp = executeSelect(stmt.(*tree.Select), catalog)
+	resp = executeSelect(stmt.(*tree.Select), catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for <>, got %v", resp.Error)
 	}
@@ -234,7 +234,7 @@ func TestSelectWhereClause(t *testing.T) {
 
 	// Test < and >
 	stmt, _ = parser.Parse("SELECT id FROM items WHERE score < 150")
-	resp = executeSelect(stmt.(*tree.Select), catalog)
+	resp = executeSelect(stmt.(*tree.Select), catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for <, got %v", resp.Error)
 	}
@@ -246,7 +246,7 @@ func TestSelectWhereClause(t *testing.T) {
 	}
 
 	stmt, _ = parser.Parse("SELECT id FROM items WHERE score > 100")
-	resp = executeSelect(stmt.(*tree.Select), catalog)
+	resp = executeSelect(stmt.(*tree.Select), catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for >, got %v", resp.Error)
 	}
@@ -259,7 +259,7 @@ func TestSelectWhereClause(t *testing.T) {
 
 	// Test AND
 	stmt, _ = parser.Parse("SELECT id FROM items WHERE id > 1 AND id < 5")
-	resp = executeSelect(stmt.(*tree.Select), catalog)
+	resp = executeSelect(stmt.(*tree.Select), catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for AND, got %v", resp.Error)
 	}
@@ -269,7 +269,7 @@ func TestSelectWhereClause(t *testing.T) {
 
 	// Test OR
 	stmt, _ = parser.Parse("SELECT id FROM items WHERE id = 1 OR id = 5")
-	resp = executeSelect(stmt.(*tree.Select), catalog)
+	resp = executeSelect(stmt.(*tree.Select), catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for OR, got %v", resp.Error)
 	}
@@ -279,7 +279,7 @@ func TestSelectWhereClause(t *testing.T) {
 
 	// Test IS NULL
 	stmt, _ = parser.Parse("SELECT id FROM items WHERE score IS NULL")
-	resp = executeSelect(stmt.(*tree.Select), catalog)
+	resp = executeSelect(stmt.(*tree.Select), catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for IS NULL, got %v", resp.Error)
 	}
@@ -289,7 +289,7 @@ func TestSelectWhereClause(t *testing.T) {
 
 	// Test IS NOT NULL
 	stmt, _ = parser.Parse("SELECT id FROM items WHERE score IS NOT NULL")
-	resp = executeSelect(stmt.(*tree.Select), catalog)
+	resp = executeSelect(stmt.(*tree.Select), catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for IS NOT NULL, got %v", resp.Error)
 	}
@@ -302,7 +302,7 @@ func TestSelectWhereClause(t *testing.T) {
 
 	// Test LIKE with %
 	stmt, _ = parser.Parse("SELECT id FROM items WHERE name LIKE 'A%'")
-	resp = executeSelect(stmt.(*tree.Select), catalog)
+	resp = executeSelect(stmt.(*tree.Select), catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for LIKE, got %v", resp.Error)
 	}
@@ -314,7 +314,7 @@ func TestSelectWhereClause(t *testing.T) {
 	}
 
 	stmt, _ = parser.Parse("SELECT id FROM items WHERE name LIKE '%e'")
-	resp = executeSelect(stmt.(*tree.Select), catalog)
+	resp = executeSelect(stmt.(*tree.Select), catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for LIKE %%e, got %v", resp.Error)
 	}
@@ -327,7 +327,7 @@ func TestSelectWhereClause(t *testing.T) {
 
 	// Test LIKE with _
 	stmt, _ = parser.Parse("SELECT id FROM items WHERE name LIKE 'B_b'")
-	resp = executeSelect(stmt.(*tree.Select), catalog)
+	resp = executeSelect(stmt.(*tree.Select), catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for LIKE _, got %v", resp.Error)
 	}
@@ -337,7 +337,7 @@ func TestSelectWhereClause(t *testing.T) {
 
 	// Test IN
 	stmt, _ = parser.Parse("SELECT id FROM items WHERE id IN (1, 3, 5)")
-	resp = executeSelect(stmt.(*tree.Select), catalog)
+	resp = executeSelect(stmt.(*tree.Select), catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for IN, got %v", resp.Error)
 	}
@@ -380,7 +380,7 @@ func TestUpdateModifiesRows(t *testing.T) {
 		t.Fatalf("Expected *tree.Update, got %T", stmt)
 	}
 
-	resp := executeUpdate(updateStmt, catalog)
+	resp := executeUpdate(updateStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}
@@ -428,7 +428,7 @@ func TestUpdateAllRows(t *testing.T) {
 
 	stmt, _ := parser.Parse("UPDATE users SET active = true")
 	updateStmt := stmt.(*tree.Update)
-	resp := executeUpdate(updateStmt, catalog)
+	resp := executeUpdate(updateStmt, catalog, nil)
 
 	if resp.RowsAffected != 3 {
 		t.Fatalf("Expected 3 rows affected, got %d", resp.RowsAffected)
@@ -469,7 +469,7 @@ func TestDeleteRemovesRows(t *testing.T) {
 		t.Fatalf("Expected *tree.Delete, got %T", stmt)
 	}
 
-	resp := executeDelete(deleteStmt, catalog)
+	resp := executeDelete(deleteStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}
@@ -518,7 +518,7 @@ func TestDeleteAllRows(t *testing.T) {
 
 	stmt, _ := parser.Parse("DELETE FROM users")
 	deleteStmt := stmt.(*tree.Delete)
-	resp := executeDelete(deleteStmt, catalog)
+	resp := executeDelete(deleteStmt, catalog, nil)
 
 	if resp.RowsAffected != 3 {
 		t.Fatalf("Expected 3 rows affected, got %d", resp.RowsAffected)
@@ -564,7 +564,7 @@ func TestSelectOrderByLimitOffset(t *testing.T) {
 		t.Fatalf("Failed to parse: %v", err)
 	}
 	selectStmt := stmt.(*tree.Select)
-	resp := executeSelect(selectStmt, catalog)
+	resp := executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for ORDER BY ASC, got %v", resp.Error)
 	}
@@ -587,7 +587,7 @@ func TestSelectOrderByLimitOffset(t *testing.T) {
 		t.Fatalf("Failed to parse: %v", err)
 	}
 	selectStmt = stmt.(*tree.Select)
-	resp = executeSelect(selectStmt, catalog)
+	resp = executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for ORDER BY DESC, got %v", resp.Error)
 	}
@@ -605,7 +605,7 @@ func TestSelectOrderByLimitOffset(t *testing.T) {
 		t.Fatalf("Failed to parse: %v", err)
 	}
 	selectStmt = stmt.(*tree.Select)
-	resp = executeSelect(selectStmt, catalog)
+	resp = executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for LIMIT, got %v", resp.Error)
 	}
@@ -625,7 +625,7 @@ func TestSelectOrderByLimitOffset(t *testing.T) {
 		t.Fatalf("Failed to parse: %v", err)
 	}
 	selectStmt = stmt.(*tree.Select)
-	resp = executeSelect(selectStmt, catalog)
+	resp = executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for OFFSET, got %v", resp.Error)
 	}
@@ -653,7 +653,7 @@ func TestSelectOrderByLimitOffset(t *testing.T) {
 		t.Fatalf("Failed to parse: %v", err)
 	}
 	selectStmt = stmt.(*tree.Select)
-	resp = executeSelect(selectStmt, catalog)
+	resp = executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for LIMIT+OFFSET, got %v", resp.Error)
 	}
@@ -719,7 +719,7 @@ func TestSelectJoins(t *testing.T) {
 		t.Fatalf("Failed to parse INNER JOIN: %v", err)
 	}
 	selectStmt := stmt.(*tree.Select)
-	resp := executeSelect(selectStmt, catalog)
+	resp := executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for INNER JOIN, got %v", resp.Error)
 	}
@@ -747,7 +747,7 @@ func TestSelectJoins(t *testing.T) {
 		t.Fatalf("Failed to parse LEFT JOIN: %v", err)
 	}
 	selectStmt = stmt.(*tree.Select)
-	resp = executeSelect(selectStmt, catalog)
+	resp = executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for LEFT JOIN, got %v", resp.Error)
 	}
@@ -797,7 +797,7 @@ func TestSelectAggregatesGroupBy(t *testing.T) {
 		t.Fatalf("Failed to parse COUNT: %v", err)
 	}
 	selectStmt := stmt.(*tree.Select)
-	resp := executeSelect(selectStmt, catalog)
+	resp := executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for COUNT, got %v", resp.Error)
 	}
@@ -818,7 +818,7 @@ func TestSelectAggregatesGroupBy(t *testing.T) {
 		t.Fatalf("Failed to parse SUM: %v", err)
 	}
 	selectStmt = stmt.(*tree.Select)
-	resp = executeSelect(selectStmt, catalog)
+	resp = executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for SUM, got %v", resp.Error)
 	}
@@ -840,7 +840,7 @@ func TestSelectAggregatesGroupBy(t *testing.T) {
 		t.Fatalf("Failed to parse AVG: %v", err)
 	}
 	selectStmt = stmt.(*tree.Select)
-	resp = executeSelect(selectStmt, catalog)
+	resp = executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for AVG, got %v", resp.Error)
 	}
@@ -862,7 +862,7 @@ func TestSelectAggregatesGroupBy(t *testing.T) {
 		t.Fatalf("Failed to parse MIN/MAX: %v", err)
 	}
 	selectStmt = stmt.(*tree.Select)
-	resp = executeSelect(selectStmt, catalog)
+	resp = executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for MIN/MAX, got %v", resp.Error)
 	}
@@ -892,7 +892,7 @@ func TestSelectAggregatesGroupBy(t *testing.T) {
 		t.Fatalf("Failed to parse GROUP BY: %v", err)
 	}
 	selectStmt = stmt.(*tree.Select)
-	resp = executeSelect(selectStmt, catalog)
+	resp = executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for GROUP BY, got %v", resp.Error)
 	}
@@ -946,7 +946,7 @@ func TestSelectAggregatesGroupBy(t *testing.T) {
 		t.Fatalf("Failed to parse GROUP BY HAVING: %v", err)
 	}
 	selectStmt = stmt.(*tree.Select)
-	resp = executeSelect(selectStmt, catalog)
+	resp = executeSelect(selectStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for GROUP BY HAVING, got %v", resp.Error)
 	}

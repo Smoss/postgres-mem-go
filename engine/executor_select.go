@@ -10,7 +10,11 @@ import (
 
 // executeSelect handles SELECT statements.
 // Supports table scan, column projection, WHERE, ORDER BY, LIMIT, OFFSET, JOINs, and aggregates.
-func executeSelect(stmt *tree.Select, catalog *Catalog) Response {
+func executeSelect(
+	stmt *tree.Select,
+	catalog *Catalog,
+	execCtx *ExecCtx,
+) Response {
 	// Handle the select statement
 	if stmt.With != nil {
 		return Response{Error: fmt.Errorf("WITH clauses not yet supported")}
@@ -25,7 +29,7 @@ func executeSelect(stmt *tree.Select, catalog *Catalog) Response {
 		}
 	}
 
-	return executeSelectClause(stmt, selectClause, catalog)
+	return executeSelectClause(stmt, selectClause, catalog, execCtx)
 }
 
 // executeSelectClause executes a simple SELECT clause.
@@ -34,6 +38,7 @@ func executeSelectClause(
 	outerSelect *tree.Select,
 	stmt *tree.SelectClause,
 	catalog *Catalog,
+	execCtx *ExecCtx,
 ) Response {
 	// Get table information
 	_, columns, err := resolveFrom(&stmt.From, catalog)
@@ -42,7 +47,7 @@ func executeSelectClause(
 	}
 
 	// Get all rows from tables (handle joins)
-	rows, err := getRowsFrom(&stmt.From, catalog)
+	rows, err := getRowsFrom(&stmt.From, catalog, execCtx)
 	if err != nil {
 		return Response{Error: err}
 	}
@@ -190,36 +195,46 @@ func resolveTableExpr(
 }
 
 // getRowsFrom retrieves rows from tables, handling JOINs.
-func getRowsFrom(from *tree.From, catalog *Catalog) ([][]interface{}, error) {
+func getRowsFrom(
+	from *tree.From,
+	catalog *Catalog,
+	execCtx *ExecCtx,
+) ([][]interface{}, error) {
 	if from == nil || from.Tables == nil || len(from.Tables) == 0 {
 		return [][]interface{}{}, nil
 	}
 
 	// Process the first table expression
-	return getRowsFromExpr(from.Tables[0], catalog)
+	return getRowsFromExpr(from.Tables[0], catalog, execCtx)
 }
 
 // getRowsFromExpr gets rows from a table expression (possibly with JOINs).
 func getRowsFromExpr(
 	expr tree.TableExpr,
 	catalog *Catalog,
+	execCtx *ExecCtx,
 ) ([][]interface{}, error) {
+	var txState *TxState
+	if execCtx != nil {
+		txState = execCtx.TxState
+	}
+
 	switch e := expr.(type) {
 	case *tree.AliasedTableExpr:
-		return getRowsFromExpr(e.Expr, catalog)
+		return getRowsFromExpr(e.Expr, catalog, execCtx)
 
 	case *tree.TableName:
 		tableName := e.String()
-		return catalog.GetAllRows(tableName)
+		return getRowsForTable(catalog, txState, tableName)
 
 	case *tree.JoinTableExpr:
 		// Get rows from left and right
-		leftRows, err := getRowsFromExpr(e.Left, catalog)
+		leftRows, err := getRowsFromExpr(e.Left, catalog, execCtx)
 		if err != nil {
 			return nil, err
 		}
 
-		rightRows, err := getRowsFromExpr(e.Right, catalog)
+		rightRows, err := getRowsFromExpr(e.Right, catalog, execCtx)
 		if err != nil {
 			return nil, err
 		}

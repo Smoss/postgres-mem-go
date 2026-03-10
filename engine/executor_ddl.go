@@ -7,7 +7,11 @@ import (
 )
 
 // executeCreateTable handles CREATE TABLE statements.
-func executeCreateTable(stmt *tree.CreateTable, catalog *Catalog) Response {
+func executeCreateTable(
+	stmt *tree.CreateTable,
+	catalog *Catalog,
+	execCtx *ExecCtx,
+) Response {
 	// Extract table name - Table is tree.TableName with a String() method
 	tableName := stmt.Table.String()
 
@@ -127,7 +131,11 @@ func processColumnDef(def *tree.ColumnTableDef) (TableColumn, error) {
 }
 
 // executeDropTable handles DROP TABLE statements.
-func executeDropTable(stmt *tree.DropTable, catalog *Catalog) Response {
+func executeDropTable(
+	stmt *tree.DropTable,
+	catalog *Catalog,
+	execCtx *ExecCtx,
+) Response {
 	// Handle multiple table names
 	for _, tableName := range stmt.Names {
 		name := tableName.String()

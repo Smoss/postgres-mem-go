@@ -385,3 +385,303 @@ func TestServer_EmptySelectReturnsRowDescription(t *testing.T) {
 		t.Fatalf("Row iteration error: %v", err)
 	}
 }
+
+// @TestDescription Start transaction, insert data, rollback, then query to verify the inserted data was not persisted.
+// @TestType Integration
+// @SystemName postgres-mem-go
+// @TestID 4cb93ceb-14f0-4822-8772-95b0a1898ce4
+func TestServer_BeginInsertRollbackDiscardsData(t *testing.T) {
+	srv := New("")
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer func() { _ = srv.Stop() }()
+
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=postgres dbname=postgres sslmode=disable",
+		srv.Addr().(*net.TCPAddr).IP.String(),
+		srv.Addr().(*net.TCPAddr).Port,
+	)
+
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+
+	_, err = conn.Exec(ctx, "CREATE TABLE rollback_test (id INT)")
+	if err != nil {
+		t.Fatalf("CREATE TABLE failed: %v", err)
+	}
+	defer func() { _, _ = conn.Exec(ctx, "DROP TABLE IF EXISTS rollback_test") }()
+
+	_, err = conn.Exec(ctx, "BEGIN")
+	if err != nil {
+		t.Fatalf("BEGIN failed: %v", err)
+	}
+
+	_, err = conn.Exec(ctx, "INSERT INTO rollback_test (id) VALUES (1)")
+	if err != nil {
+		t.Fatalf("INSERT failed: %v", err)
+	}
+
+	_, err = conn.Exec(ctx, "ROLLBACK")
+	if err != nil {
+		t.Fatalf("ROLLBACK failed: %v", err)
+	}
+
+	rows, err := conn.Query(
+		ctx,
+		"SELECT id FROM rollback_test",
+		pgx.QueryExecModeSimpleProtocol,
+	)
+	if err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	defer rows.Close()
+
+	rowCount := 0
+	for rows.Next() {
+		rowCount++
+	}
+	if rowCount != 0 {
+		t.Fatalf("Expected 0 rows after ROLLBACK, got %d", rowCount)
+	}
+}
+
+// @TestDescription Start transaction, insert data, commit, then query in a new connection/transaction to verify data was persisted.
+// @TestType Integration
+// @SystemName postgres-mem-go
+// @TestID ab15088f-1aa4-4963-8a56-6ff158d838ec
+func TestServer_BeginInsertCommitPersistsData(t *testing.T) {
+	srv := New("")
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer func() { _ = srv.Stop() }()
+
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=postgres dbname=postgres sslmode=disable",
+		srv.Addr().(*net.TCPAddr).IP.String(),
+		srv.Addr().(*net.TCPAddr).Port,
+	)
+
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+
+	_, err = conn.Exec(ctx, "CREATE TABLE commit_test (id INT)")
+	if err != nil {
+		t.Fatalf("CREATE TABLE failed: %v", err)
+	}
+	defer func() { _, _ = conn.Exec(ctx, "DROP TABLE IF EXISTS commit_test") }()
+
+	_, err = conn.Exec(ctx, "BEGIN")
+	if err != nil {
+		t.Fatalf("BEGIN failed: %v", err)
+	}
+
+	_, err = conn.Exec(ctx, "INSERT INTO commit_test (id) VALUES (42)")
+	if err != nil {
+		t.Fatalf("INSERT failed: %v", err)
+	}
+
+	_, err = conn.Exec(ctx, "COMMIT")
+	if err != nil {
+		t.Fatalf("COMMIT failed: %v", err)
+	}
+
+	// New connection to verify data was persisted
+	conn2, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer func() { _ = conn2.Close(ctx) }()
+
+	rows, err := conn2.Query(
+		ctx,
+		"SELECT id FROM commit_test",
+		pgx.QueryExecModeSimpleProtocol,
+	)
+	if err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	defer rows.Close()
+
+	rowCount := 0
+	var id int32
+	for rows.Next() {
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("Scan failed: %v", err)
+		}
+		if id != 42 {
+			t.Fatalf("Expected id=42, got %d", id)
+		}
+		rowCount++
+	}
+	if rowCount != 1 {
+		t.Fatalf("Expected 1 row after COMMIT, got %d", rowCount)
+	}
+}
+
+// @TestDescription Execute INSERT without explicit transaction, then query in a separate connection to verify data was auto-committed.
+// @TestType Integration
+// @SystemName postgres-mem-go
+// @TestID d557510c-edb8-419f-b6a1-20d202891605
+func TestServer_StatementWithoutBeginAutoCommits(t *testing.T) {
+	srv := New("")
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer func() { _ = srv.Stop() }()
+
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=postgres dbname=postgres sslmode=disable",
+		srv.Addr().(*net.TCPAddr).IP.String(),
+		srv.Addr().(*net.TCPAddr).Port,
+	)
+
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+
+	_, err = conn.Exec(ctx, "CREATE TABLE autocommit_test (id INT)")
+	if err != nil {
+		t.Fatalf("CREATE TABLE failed: %v", err)
+	}
+	defer func() { _, _ = conn.Exec(ctx, "DROP TABLE IF EXISTS autocommit_test") }()
+
+	// No BEGIN - INSERT should auto-commit
+	_, err = conn.Exec(ctx, "INSERT INTO autocommit_test (id) VALUES (99)")
+	if err != nil {
+		t.Fatalf("INSERT failed: %v", err)
+	}
+
+	// Separate connection should see the data
+	conn2, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer func() { _ = conn2.Close(ctx) }()
+
+	rows, err := conn2.Query(
+		ctx,
+		"SELECT id FROM autocommit_test",
+		pgx.QueryExecModeSimpleProtocol,
+	)
+	if err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	defer rows.Close()
+
+	rowCount := 0
+	for rows.Next() {
+		rowCount++
+	}
+	if rowCount != 1 {
+		t.Fatalf("Expected 1 row (autocommit), got %d", rowCount)
+	}
+}
+
+// @TestDescription Connection A starts transaction and inserts data. Connection B queries the same table and should not see the uncommitted data. Connection A commits. Connection B (new transaction) should now see the data.
+// @TestType Integration
+// @SystemName postgres-mem-go
+// @TestID 11054f07-c33d-4e6a-8017-5504ecf18261
+func TestServer_TwoConcurrentConnectionsWithTransactionsDoNotSeeUncommittedData(
+	t *testing.T,
+) {
+	srv := New("")
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer func() { _ = srv.Stop() }()
+
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=postgres dbname=postgres sslmode=disable",
+		srv.Addr().(*net.TCPAddr).IP.String(),
+		srv.Addr().(*net.TCPAddr).Port,
+	)
+
+	ctx := context.Background()
+
+	connA, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("Connection A failed: %v", err)
+	}
+	defer func() { _ = connA.Close(ctx) }()
+
+	connB, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("Connection B failed: %v", err)
+	}
+	defer func() { _ = connB.Close(ctx) }()
+
+	_, err = connA.Exec(ctx, "CREATE TABLE isolation_test (id INT)")
+	if err != nil {
+		t.Fatalf("CREATE TABLE failed: %v", err)
+	}
+	defer func() { _, _ = connA.Exec(ctx, "DROP TABLE IF EXISTS isolation_test") }()
+
+	// Connection A: BEGIN, INSERT (uncommitted)
+	_, err = connA.Exec(ctx, "BEGIN")
+	if err != nil {
+		t.Fatalf("BEGIN failed: %v", err)
+	}
+
+	_, err = connA.Exec(ctx, "INSERT INTO isolation_test (id) VALUES (1)")
+	if err != nil {
+		t.Fatalf("INSERT failed: %v", err)
+	}
+
+	// Connection B: SELECT - should NOT see uncommitted data
+	rows, err := connB.Query(
+		ctx,
+		"SELECT id FROM isolation_test",
+		pgx.QueryExecModeSimpleProtocol,
+	)
+	if err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	rowCount := 0
+	for rows.Next() {
+		rowCount++
+	}
+	rows.Close()
+	if rowCount != 0 {
+		t.Fatalf(
+			"Connection B should not see uncommitted data, got %d rows",
+			rowCount,
+		)
+	}
+
+	// Connection A: COMMIT
+	_, err = connA.Exec(ctx, "COMMIT")
+	if err != nil {
+		t.Fatalf("COMMIT failed: %v", err)
+	}
+
+	// Connection B: SELECT again - should now see the data
+	rows, err = connB.Query(
+		ctx,
+		"SELECT id FROM isolation_test",
+		pgx.QueryExecModeSimpleProtocol,
+	)
+	if err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	rowCount = 0
+	for rows.Next() {
+		rowCount++
+	}
+	rows.Close()
+	if rowCount != 1 {
+		t.Fatalf("Connection B should see 1 row after commit, got %d", rowCount)
+	}
+}

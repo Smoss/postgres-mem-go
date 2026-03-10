@@ -351,11 +351,11 @@ func TestEngineDispatchBegin(t *testing.T) {
 	})
 
 	resp := <-respCh
-	if resp.Error == nil {
-		t.Fatal("Expected error for unimplemented BEGIN")
+	if resp.Error != nil {
+		t.Fatalf("Expected success for BEGIN, got error: %v", resp.Error)
 	}
-	if resp.Error.Error() != "BEGIN TRANSACTION not yet implemented" {
-		t.Fatalf("Unexpected error: %v", resp.Error)
+	if resp.TxStatus != 'T' {
+		t.Fatalf("Expected TxStatus 'T' after BEGIN, got %c", resp.TxStatus)
 	}
 }
 
@@ -378,11 +378,14 @@ func TestEngineDispatchCommit(t *testing.T) {
 	})
 
 	resp := <-respCh
-	if resp.Error == nil {
-		t.Fatal("Expected error for unimplemented COMMIT")
+	if resp.Error != nil {
+		t.Fatalf(
+			"Expected success for COMMIT (when not in transaction), got error: %v",
+			resp.Error,
+		)
 	}
-	if resp.Error.Error() != "COMMIT not yet implemented" {
-		t.Fatalf("Unexpected error: %v", resp.Error)
+	if resp.TxStatus != 'I' {
+		t.Fatalf("Expected TxStatus 'I' after COMMIT, got %c", resp.TxStatus)
 	}
 }
 
@@ -405,11 +408,72 @@ func TestEngineDispatchRollback(t *testing.T) {
 	})
 
 	resp := <-respCh
-	if resp.Error == nil {
-		t.Fatal("Expected error for unimplemented ROLLBACK")
+	if resp.Error != nil {
+		t.Fatalf(
+			"Expected success for ROLLBACK (when not in transaction), got error: %v",
+			resp.Error,
+		)
 	}
-	if resp.Error.Error() != "ROLLBACK not yet implemented" {
-		t.Fatalf("Unexpected error: %v", resp.Error)
+	if resp.TxStatus != 'I' {
+		t.Fatalf("Expected TxStatus 'I' after ROLLBACK, got %c", resp.TxStatus)
+	}
+}
+
+// @TestDescription Unit test: Send multiple requests to engine goroutine and verify they are processed sequentially with correct responses returned on their respective channels.
+// @TestType Unit
+// @SystemName postgres-mem-go
+// @TestID 2a39125d-1f48-4a60-ad78-68fe55c6a4a0
+func TestEngine_ProcessesRequestsSerially(t *testing.T) {
+	eng := New()
+	eng.Start()
+	defer eng.Stop()
+
+	// Create table first
+	createStmt, _ := parser.Parse("CREATE TABLE ser (id INT)")
+	respCh := make(chan Response, 1)
+	eng.Submit(Request{Stmt: createStmt, ConnID: 1, ResponseCh: respCh})
+	if (<-respCh).Error != nil {
+		t.Fatal("CREATE TABLE failed")
+	}
+
+	// Send multiple requests from different goroutines, verify sequential processing
+	done := make(chan bool, 3)
+	for i := 0; i < 3; i++ {
+		go func(connID uint64) {
+			insertStmt, _ := parser.Parse("INSERT INTO ser (id) VALUES (1)")
+			respCh := make(chan Response, 1)
+			eng.Submit(
+				Request{Stmt: insertStmt, ConnID: connID, ResponseCh: respCh},
+			)
+			resp := <-respCh
+			if resp.Error != nil {
+				t.Errorf("Connection %d: got error %v", connID, resp.Error)
+			}
+			if resp.RowsAffected != 1 {
+				t.Errorf(
+					"Connection %d: expected RowsAffected 1, got %d",
+					connID,
+					resp.RowsAffected,
+				)
+			}
+			done <- true
+		}(uint64(i + 1))
+	}
+
+	for i := 0; i < 3; i++ {
+		<-done
+	}
+
+	// Verify all 3 rows were inserted
+	selectStmt, _ := parser.Parse("SELECT id FROM ser")
+	respCh = make(chan Response, 1)
+	eng.Submit(Request{Stmt: selectStmt, ConnID: 1, ResponseCh: respCh})
+	resp := <-respCh
+	if resp.Error != nil {
+		t.Fatalf("SELECT failed: %v", resp.Error)
+	}
+	if len(resp.Rows) != 3 {
+		t.Fatalf("Expected 3 rows (serial processing), got %d", len(resp.Rows))
 	}
 }
 

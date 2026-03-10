@@ -9,7 +9,11 @@ import (
 
 // executeInsert handles INSERT statements.
 // Supports INSERT INTO ... VALUES (...) and INSERT ... RETURNING ...
-func executeInsert(stmt *tree.Insert, catalog *Catalog) Response {
+func executeInsert(
+	stmt *tree.Insert,
+	catalog *Catalog,
+	execCtx *ExecCtx,
+) Response {
 	// Get the table name from AliasedTableExpr
 	aliasedTable, ok := stmt.Table.(*tree.AliasedTableExpr)
 	if !ok {
@@ -74,8 +78,13 @@ func executeInsert(stmt *tree.Insert, catalog *Catalog) Response {
 			values[i] = val
 		}
 
-		// Insert the row
-		if err := catalog.InsertRow(tableName, values); err != nil {
+		// Insert the row (buffer if in transaction, else direct to catalog)
+		if execCtx != nil && execCtx.TxState != nil && execCtx.TxState.InTx {
+			execCtx.TxState.PendingInserts[tableName] = append(
+				execCtx.TxState.PendingInserts[tableName],
+				values,
+			)
+		} else if err := catalog.InsertRow(tableName, values); err != nil {
 			return Response{Error: err}
 		}
 

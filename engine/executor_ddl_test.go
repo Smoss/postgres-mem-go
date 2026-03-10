@@ -23,7 +23,7 @@ func TestExecuteCreateTable(t *testing.T) {
 		t.Fatalf("Expected *tree.CreateTable, got %T", stmt)
 	}
 
-	resp := executeCreateTable(createStmt, catalog)
+	resp := executeCreateTable(createStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}
@@ -57,7 +57,7 @@ func TestExecuteCreateTableIfNotExists(t *testing.T) {
 		t.Fatalf("Expected *tree.CreateTable, got %T", stmt)
 	}
 
-	resp := executeCreateTable(createStmt, catalog)
+	resp := executeCreateTable(createStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error on first create, got %v", resp.Error)
 	}
@@ -73,7 +73,7 @@ func TestExecuteCreateTableIfNotExists(t *testing.T) {
 		t.Fatalf("Expected *tree.CreateTable, got %T", stmt2)
 	}
 
-	resp = executeCreateTable(createStmt2, catalog)
+	resp = executeCreateTable(createStmt2, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error with IF NOT EXISTS, got %v", resp.Error)
 	}
@@ -94,7 +94,7 @@ func TestExecuteCreateTableDuplicateError(t *testing.T) {
 		t.Fatalf("Expected *tree.CreateTable, got %T", stmt)
 	}
 
-	resp := executeCreateTable(createStmt, catalog)
+	resp := executeCreateTable(createStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error on first create, got %v", resp.Error)
 	}
@@ -110,7 +110,7 @@ func TestExecuteCreateTableDuplicateError(t *testing.T) {
 		t.Fatalf("Expected *tree.CreateTable, got %T", stmt2)
 	}
 
-	resp = executeCreateTable(createStmt2, catalog)
+	resp = executeCreateTable(createStmt2, catalog, nil)
 	if resp.Error == nil {
 		t.Fatal("Expected error for duplicate table")
 	}
@@ -132,7 +132,7 @@ func TestExecuteCreateTableWithConstraints(t *testing.T) {
 		t.Fatalf("Expected *tree.CreateTable, got %T", stmt)
 	}
 
-	resp := executeCreateTable(createStmt, catalog)
+	resp := executeCreateTable(createStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}
@@ -185,7 +185,7 @@ func TestExecuteCreateTableWithPrimaryKey(t *testing.T) {
 		t.Fatalf("Expected *tree.CreateTable, got %T", stmt)
 	}
 
-	resp := executeCreateTable(createStmt, catalog)
+	resp := executeCreateTable(createStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}
@@ -221,7 +221,7 @@ func TestExecuteCreateTableWithSeparatePrimaryKey(t *testing.T) {
 		t.Fatalf("Expected *tree.CreateTable, got %T", stmt)
 	}
 
-	resp := executeCreateTable(createStmt, catalog)
+	resp := executeCreateTable(createStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}
@@ -257,7 +257,7 @@ func TestExecuteCreateTableWithMultipleColumns(t *testing.T) {
 		t.Fatalf("Expected *tree.CreateTable, got %T", stmt)
 	}
 
-	resp := executeCreateTable(createStmt, catalog)
+	resp := executeCreateTable(createStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}
@@ -339,7 +339,7 @@ func TestExecuteCreateTableWithTypeAliases(t *testing.T) {
 			t.Fatalf("Expected *tree.CreateTable, got %T", stmt)
 		}
 
-		resp := executeCreateTable(createStmt, catalog)
+		resp := executeCreateTable(createStmt, catalog, nil)
 		if resp.Error != nil {
 			t.Fatalf("Expected no error for %s, got %v", tc.sqlType, resp.Error)
 		}
@@ -375,7 +375,7 @@ func TestExecuteDropTable(t *testing.T) {
 		t.Fatalf("Expected *tree.CreateTable, got %T", createStmtParsed)
 	}
 
-	resp := executeCreateTable(createStmt, catalog)
+	resp := executeCreateTable(createStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Failed to create table: %v", resp.Error)
 	}
@@ -391,7 +391,7 @@ func TestExecuteDropTable(t *testing.T) {
 		t.Fatalf("Expected *tree.DropTable, got %T", dropStmtParsed)
 	}
 
-	resp = executeDropTable(dropStmt, catalog)
+	resp = executeDropTable(dropStmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}
@@ -416,7 +416,7 @@ func TestExecuteDropTableIfExists(t *testing.T) {
 		t.Fatalf("Expected *tree.DropTable, got %T", stmtParsed)
 	}
 
-	resp := executeDropTable(stmt, catalog)
+	resp := executeDropTable(stmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error with IF EXISTS, got %v", resp.Error)
 	}
@@ -436,7 +436,7 @@ func TestExecuteDropTableNotFoundError(t *testing.T) {
 		t.Fatalf("Expected *tree.DropTable, got %T", stmtParsed)
 	}
 
-	resp := executeDropTable(stmt, catalog)
+	resp := executeDropTable(stmt, catalog, nil)
 	if resp.Error == nil {
 		t.Fatal("Expected error for missing table")
 	}
@@ -449,11 +449,11 @@ func TestExecuteDropTableMultiple(t *testing.T) {
 	// Create tables
 	createStmt1Parsed, _ := parser.Parse("CREATE TABLE users (id INT)")
 	createStmt1, _ := createStmt1Parsed.(*tree.CreateTable)
-	executeCreateTable(createStmt1, catalog)
+	executeCreateTable(createStmt1, catalog, nil)
 
 	createStmt2Parsed, _ := parser.Parse("CREATE TABLE products (id INT)")
 	createStmt2, _ := createStmt2Parsed.(*tree.CreateTable)
-	executeCreateTable(createStmt2, catalog)
+	executeCreateTable(createStmt2, catalog, nil)
 
 	// Verify both exist
 	if !catalog.TableExists("users") || !catalog.TableExists("products") {
@@ -471,7 +471,7 @@ func TestExecuteDropTableMultiple(t *testing.T) {
 		t.Fatalf("Expected *tree.DropTable, got %T", stmtParsed)
 	}
 
-	resp := executeDropTable(stmt, catalog)
+	resp := executeDropTable(stmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}
@@ -509,7 +509,7 @@ func TestExecuteCreateTableWithAllPostgreSQLTypes(t *testing.T) {
 		t.Fatalf("Expected *tree.CreateTable, got %T", stmtParsed)
 	}
 
-	resp := executeCreateTable(stmt, catalog)
+	resp := executeCreateTable(stmt, catalog, nil)
 	if resp.Error != nil {
 		t.Fatalf("Expected no error, got %v", resp.Error)
 	}

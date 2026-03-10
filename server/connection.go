@@ -11,7 +11,7 @@ import (
 )
 
 // handleConnection handles a single client connection.
-func handleConnection(conn net.Conn, eng *engine.Engine) {
+func handleConnection(conn net.Conn, eng *engine.Engine, connID uint64) {
 	defer func() { _ = conn.Close() }()
 
 	backend := pgproto3.NewBackend(conn, conn)
@@ -97,7 +97,7 @@ func handleConnection(conn net.Conn, eng *engine.Engine) {
 
 		switch m := msg.(type) {
 		case *pgproto3.Query:
-			if err := handleQuery(backend, m.String, eng); err != nil {
+			if err := handleQuery(backend, m.String, eng, connID); err != nil {
 				return
 			}
 		case *pgproto3.Terminate:
@@ -119,6 +119,7 @@ func handleQuery(
 	backend *pgproto3.Backend,
 	sql string,
 	eng *engine.Engine,
+	connID uint64,
 ) error {
 	// Parse the SQL statement
 	stmt, err := parser.Parse(sql)
@@ -147,7 +148,7 @@ func handleQuery(
 	respCh := make(chan engine.Response, 1)
 	eng.Submit(engine.Request{
 		Stmt:       stmt,
-		ConnID:     0, // TODO: assign connection IDs
+		ConnID:     connID,
 		ResponseCh: respCh,
 	})
 
@@ -163,7 +164,11 @@ func handleQuery(
 			Code:     code,
 			Message:  resp.Error.Error(),
 		})
-		backend.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
+		txStatus := resp.TxStatus
+		if txStatus == 0 {
+			txStatus = 'I'
+		}
+		backend.Send(&pgproto3.ReadyForQuery{TxStatus: txStatus})
 		return backend.Flush()
 	}
 
@@ -203,7 +208,11 @@ func handleQuery(
 	})
 
 	// Send ReadyForQuery to indicate we're ready for more queries
-	backend.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
+	txStatus := resp.TxStatus
+	if txStatus == 0 {
+		txStatus = 'I'
+	}
+	backend.Send(&pgproto3.ReadyForQuery{TxStatus: txStatus})
 
 	return backend.Flush()
 }

@@ -9,7 +9,11 @@ import (
 
 // executeUpdate handles UPDATE statements.
 // Supports UPDATE table SET col = val, ... WHERE condition
-func executeUpdate(stmt *tree.Update, catalog *Catalog) Response {
+func executeUpdate(
+	stmt *tree.Update,
+	catalog *Catalog,
+	execCtx *ExecCtx,
+) Response {
 	// Get the table name from AliasedTableExpr
 	aliasedTable, ok := stmt.Table.(*tree.AliasedTableExpr)
 	if !ok {
@@ -84,86 +88,59 @@ func executeUpdate(stmt *tree.Update, catalog *Catalog) Response {
 		})
 	}
 
-	// Perform the update
-	var rowsAffected int64
-
-	if stmt.Where == nil {
-		// Update all rows
-		_, err := catalog.UpdateRows(tableName,
-			func(row []interface{}) bool {
-				return true // Match all rows
-			},
-			func(row []interface{}) []interface{} {
-				newRow := make([]interface{}, len(row))
-				copy(newRow, row)
-
-				// Apply updates
-				for _, upd := range updates {
-					val, err := evaluateExpr(
-						upd.expr,
-						table.Columns[upd.colIdx].GoType,
-					)
-					if err == nil {
-						newRow[upd.colIdx] = val
-					}
-				}
-				return newRow
-			},
-		)
-		if err != nil {
-			return Response{Error: err}
-		}
-		// Get row count
-		allRows, _ := catalog.GetAllRows(tableName)
-		rowsAffected = int64(len(allRows))
-	} else {
-		// Update rows matching WHERE clause
-		_, err := catalog.UpdateRows(tableName,
-			func(row []interface{}) bool {
-				match, err := evaluateWhereExpr(
-					stmt.Where.Expr,
-					row,
-					columns,
-					catalog,
-				)
-				if err != nil {
-					return false
-				}
-				return match
-			},
-			func(row []interface{}) []interface{} {
-				newRow := make([]interface{}, len(row))
-				copy(newRow, row)
-
-				// Apply updates
-				for _, upd := range updates {
-					val, err := evaluateExpr(
-						upd.expr,
-						table.Columns[upd.colIdx].GoType,
-					)
-					if err == nil {
-						newRow[upd.colIdx] = val
-					}
-				}
-				return newRow
-			},
-		)
-		if err != nil {
-			return Response{Error: err}
-		}
-		// Count affected rows by evaluating the predicate
-		allRows, _ := catalog.GetAllRows(tableName)
-		for _, row := range allRows {
-			match, _ := evaluateWhereExpr(
+	// Build predicate and updater
+	predicate := func(row []interface{}) bool { return true }
+	if stmt.Where != nil {
+		predicate = func(row []interface{}) bool {
+			match, err := evaluateWhereExpr(
 				stmt.Where.Expr,
 				row,
 				columns,
 				catalog,
 			)
-			if match {
+			return err == nil && match
+		}
+	}
+	updater := func(row []interface{}) []interface{} {
+		newRow := make([]interface{}, len(row))
+		copy(newRow, row)
+		for _, upd := range updates {
+			val, err := evaluateExpr(
+				upd.expr,
+				table.Columns[upd.colIdx].GoType,
+			)
+			if err == nil {
+				newRow[upd.colIdx] = val
+			}
+		}
+		return newRow
+	}
+
+	var rowsAffected int64
+
+	if execCtx != nil && execCtx.TxState != nil && execCtx.TxState.InTx {
+		// Buffer the update for commit
+		execCtx.TxState.PendingUpdates[tableName] = append(
+			execCtx.TxState.PendingUpdates[tableName],
+			struct {
+				Predicate func([]interface{}) bool
+				Updater   func([]interface{}) []interface{}
+			}{Predicate: predicate, Updater: updater},
+		)
+		// Count affected rows from merged view
+		rows, _ := getRowsForTable(catalog, execCtx.TxState, tableName)
+		for _, row := range rows {
+			if predicate(row) {
 				rowsAffected++
 			}
 		}
+	} else {
+		// Apply directly to catalog
+		count, err := catalog.UpdateRows(tableName, predicate, updater)
+		if err != nil {
+			return Response{Error: err}
+		}
+		rowsAffected = int64(count)
 	}
 
 	return Response{RowsAffected: rowsAffected}

@@ -8,7 +8,11 @@ import (
 
 // executeDelete handles DELETE statements.
 // Supports DELETE FROM table WHERE condition
-func executeDelete(stmt *tree.Delete, catalog *Catalog) Response {
+func executeDelete(
+	stmt *tree.Delete,
+	catalog *Catalog,
+	execCtx *ExecCtx,
+) Response {
 	// Get the table name from AliasedTableExpr
 	aliasedTable, ok := stmt.Table.(*tree.AliasedTableExpr)
 	if !ok {
@@ -43,36 +47,38 @@ func executeDelete(stmt *tree.Delete, catalog *Catalog) Response {
 		columns[i] = Column{Name: col.Name, TypeOID: col.TypeOID}
 	}
 
-	// Perform the delete
+	// Build predicate
+	predicate := func(row []interface{}) bool { return true }
+	if stmt.Where != nil {
+		predicate = func(row []interface{}) bool {
+			match, err := evaluateWhereExpr(
+				stmt.Where.Expr,
+				row,
+				columns,
+				catalog,
+			)
+			return err == nil && match
+		}
+	}
+
 	var rowsAffected int64
 
-	if stmt.Where == nil {
-		// Delete all rows
-		count, err := catalog.DeleteRows(tableName,
-			func(row []interface{}) bool {
-				return true // Match all rows
-			},
+	if execCtx != nil && execCtx.TxState != nil && execCtx.TxState.InTx {
+		// Buffer the delete for commit
+		execCtx.TxState.PendingDeletes[tableName] = append(
+			execCtx.TxState.PendingDeletes[tableName],
+			predicate,
 		)
-		if err != nil {
-			return Response{Error: err}
+		// Count affected rows from merged view
+		rows, _ := getRowsForTable(catalog, execCtx.TxState, tableName)
+		for _, row := range rows {
+			if predicate(row) {
+				rowsAffected++
+			}
 		}
-		rowsAffected = int64(count)
 	} else {
-		// Delete rows matching WHERE clause
-		count, err := catalog.DeleteRows(tableName,
-			func(row []interface{}) bool {
-				match, err := evaluateWhereExpr(
-					stmt.Where.Expr,
-					row,
-					columns,
-					catalog,
-				)
-				if err != nil {
-					return false
-				}
-				return match
-			},
-		)
+		// Apply directly to catalog
+		count, err := catalog.DeleteRows(tableName, predicate)
 		if err != nil {
 			return Response{Error: err}
 		}
