@@ -224,8 +224,27 @@ func getRowsFromExpr(
 			return nil, err
 		}
 
+		// Resolve columns for ON condition evaluation
+		_, leftCols, err := resolveTableExpr(e.Left, catalog)
+		if err != nil {
+			return nil, err
+		}
+		_, rightCols, err := resolveTableExpr(e.Right, catalog)
+		if err != nil {
+			return nil, err
+		}
+		combinedColumns := append(leftCols, rightCols...)
+
 		// Perform the join
-		return performJoin(leftRows, rightRows, e.JoinType, e.Cond, catalog)
+		return performJoin(
+			leftRows,
+			rightRows,
+			combinedColumns,
+			len(rightCols),
+			e.JoinType,
+			e.Cond,
+			catalog,
+		)
 
 	default:
 		return nil, fmt.Errorf("unsupported table expression: %T", expr)
@@ -235,6 +254,8 @@ func getRowsFromExpr(
 // performJoin performs a join between two row sets.
 func performJoin(
 	leftRows, rightRows [][]interface{},
+	columns []Column,
+	rightColCount int,
 	joinType string,
 	cond tree.JoinCond,
 	catalog *Catalog,
@@ -246,18 +267,27 @@ func performJoin(
 
 		for _, rightRow := range rightRows {
 			// Combine rows
-			combinedRow := append(leftRow, rightRow...)
+			combinedRow := append(
+				append([]interface{}(nil), leftRow...),
+				rightRow...)
 
 			// Evaluate join condition if present
 			if cond != nil {
-				// For now, simple cross join if no condition
 				switch c := cond.(type) {
 				case *tree.OnJoinCond:
-					// TODO: Evaluate the ON expression
-					// For now, accept all matches
-					_ = c
-					result = append(result, combinedRow)
-					matched = true
+					ok, err := evaluateWhereExpr(
+						c.Expr,
+						combinedRow,
+						columns,
+						catalog,
+					)
+					if err != nil {
+						return nil, err
+					}
+					if ok {
+						result = append(result, combinedRow)
+						matched = true
+					}
 				default:
 					// No condition or unsupported - do cross join
 					result = append(result, combinedRow)
@@ -273,8 +303,11 @@ func performJoin(
 		// For LEFT JOIN, include left row even if no match
 		if !matched && joinType == "LEFT" {
 			// Append NULLs for right side
-			nullRow := make([]interface{}, len(rightRows[0]))
-			result = append(result, append(leftRow, nullRow...))
+			nullRow := make([]interface{}, rightColCount)
+			result = append(
+				result,
+				append(append([]interface{}(nil), leftRow...), nullRow...),
+			)
 		}
 	}
 
@@ -385,47 +418,36 @@ func evaluateComparison(
 		return false, err
 	}
 
-	switch expr.Operator.String() {
-	case "=":
-		rightVal, err := getExprValue(expr.Right, row, columns, catalog)
-		if err != nil {
-			return false, err
+	rightVal, err := getExprValue(expr.Right, row, columns, catalog)
+	if err != nil {
+		return false, err
+	}
+
+	// In SQL, comparison with NULL yields NULL (unknown), which filters out the row
+	op := expr.Operator.String()
+	if op != "IS" && op != "IS NOT" {
+		if leftVal == nil || rightVal == nil {
+			return false, nil
 		}
+	}
+
+	switch op {
+	case "=":
 		return compareValues(leftVal, rightVal) == 0, nil
 
 	case "!=", "<>":
-		rightVal, err := getExprValue(expr.Right, row, columns, catalog)
-		if err != nil {
-			return false, err
-		}
 		return compareValues(leftVal, rightVal) != 0, nil
 
 	case "<":
-		rightVal, err := getExprValue(expr.Right, row, columns, catalog)
-		if err != nil {
-			return false, err
-		}
 		return compareValues(leftVal, rightVal) < 0, nil
 
 	case "<=":
-		rightVal, err := getExprValue(expr.Right, row, columns, catalog)
-		if err != nil {
-			return false, err
-		}
 		return compareValues(leftVal, rightVal) <= 0, nil
 
 	case ">":
-		rightVal, err := getExprValue(expr.Right, row, columns, catalog)
-		if err != nil {
-			return false, err
-		}
 		return compareValues(leftVal, rightVal) > 0, nil
 
 	case ">=":
-		rightVal, err := getExprValue(expr.Right, row, columns, catalog)
-		if err != nil {
-			return false, err
-		}
 		return compareValues(leftVal, rightVal) >= 0, nil
 
 	case "LIKE":
@@ -608,6 +630,13 @@ func getExprValue(
 		// Check if this is a DNull
 		if d, ok := expr.(tree.Datum); ok && d == tree.DNull {
 			return nil, nil
+		}
+		// Try to find as column reference (e.g. for HAVING SUM(amount) > 150)
+		exprStr := expr.String()
+		for i, col := range columns {
+			if strings.EqualFold(col.Name, exprStr) {
+				return row[i], nil
+			}
 		}
 		return expr.String(), nil
 	}
@@ -925,9 +954,100 @@ func executeGroupBy(
 		return executeSimpleAggregate(rows, columns, selectExprs, catalog)
 	}
 
-	// TODO: Implement full GROUP BY with grouping
-	// For now, return all rows with aggregate evaluation
-	return executeSimpleAggregate(rows, columns, selectExprs, catalog)
+	// Group rows by GROUP BY expression values
+	groups := make(map[string][][]interface{})
+	for _, row := range rows {
+		keyParts := make([]string, len(groupBy))
+		for i, expr := range groupBy {
+			val, err := getExprValue(expr, row, columns, catalog)
+			if err != nil {
+				return nil, nil, err
+			}
+			if val == nil {
+				keyParts[i] = "NULL"
+			} else {
+				keyParts[i] = fmt.Sprintf("%v", val)
+			}
+		}
+		key := strings.Join(keyParts, "|")
+		groups[key] = append(groups[key], row)
+	}
+
+	// Produce one row per group
+	var resultRows [][]interface{}
+	var resultCols []Column
+	// Get resultCols from first group (all groups have same schema)
+	var firstGroupRows [][]interface{}
+	for _, groupRows := range groups {
+		firstGroupRows = groupRows
+		break
+	}
+	for _, expr := range selectExprs {
+		if isAggregate(expr.Expr) {
+			_, col, err := evaluateAggregate(
+				expr.Expr,
+				firstGroupRows,
+				columns,
+				catalog,
+			)
+			if err != nil {
+				return nil, nil, err
+			}
+			resultCols = append(resultCols, col)
+		} else {
+			resultCols = append(
+				resultCols,
+				Column{Name: expr.Expr.String(), TypeOID: 25},
+			)
+		}
+	}
+
+	for _, groupRows := range groups {
+		resultRow := make([]interface{}, len(selectExprs))
+		for i, expr := range selectExprs {
+			if isAggregate(expr.Expr) {
+				val, _, err := evaluateAggregate(
+					expr.Expr,
+					groupRows,
+					columns,
+					catalog,
+				)
+				if err != nil {
+					return nil, nil, err
+				}
+				resultRow[i] = val
+			} else {
+				val, err := getExprValue(
+					expr.Expr,
+					groupRows[0],
+					columns,
+					catalog,
+				)
+				if err != nil {
+					return nil, nil, err
+				}
+				resultRow[i] = val
+			}
+		}
+		resultRows = append(resultRows, resultRow)
+	}
+
+	// Apply HAVING filter
+	if having != nil {
+		var filtered [][]interface{}
+		for _, row := range resultRows {
+			ok, err := evaluateWhereExpr(having.Expr, row, resultCols, catalog)
+			if err != nil {
+				return nil, nil, err
+			}
+			if ok {
+				filtered = append(filtered, row)
+			}
+		}
+		resultRows = filtered
+	}
+
+	return resultRows, resultCols, nil
 }
 
 // executeSimpleAggregate computes aggregates over all rows.

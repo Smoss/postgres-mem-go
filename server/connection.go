@@ -171,8 +171,8 @@ func handleQuery(
 	commandTag := generateCommandTag(stmt, resp)
 
 	// Send RowDescription and DataRow messages for SELECT results
-	if len(resp.Rows) > 0 && len(resp.Columns) > 0 {
-		// Send RowDescription
+	// RowDescription must be sent for SELECT even when there are 0 rows (wire protocol requirement)
+	if _, isSelect := stmt.(*tree.Select); isSelect && len(resp.Columns) > 0 {
 		fields := make([]pgproto3.FieldDescription, len(resp.Columns))
 		for i, col := range resp.Columns {
 			fields[i] = pgproto3.FieldDescription{
@@ -187,7 +187,7 @@ func handleQuery(
 		}
 		backend.Send(&pgproto3.RowDescription{Fields: fields})
 
-		// Send DataRow messages
+		// Send DataRow messages for each row
 		for _, row := range resp.Rows {
 			values := make([][]byte, len(row))
 			for i, val := range row {

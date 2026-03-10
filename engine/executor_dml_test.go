@@ -184,6 +184,168 @@ func TestSelectTableScan(t *testing.T) {
 	}
 }
 
+// @TestDescription WHERE clause filters correctly with comparison, AND/OR, IS NULL, LIKE, IN
+// @TestType integration
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID da7ad25e-8800-4eba-b67d-b7d1bff3844f
+func TestSelectWhereClause(t *testing.T) {
+	catalog := NewCatalog()
+
+	// Create table with varied data (ints, strings, NULLs)
+	table := &Table{
+		Name: "items",
+		Columns: []TableColumn{
+			{Name: "id", TypeOID: 23, GoType: "int32"},
+			{Name: "name", TypeOID: 25, GoType: "string"},
+			{Name: "score", TypeOID: 23, GoType: "int32"},
+		},
+		Rows: [][]interface{}{
+			{int32(1), "Alice", int32(100)},
+			{int32(2), "Bob", int32(200)},
+			{int32(3), "Charlie", int32(150)},
+			{int32(4), "David", nil},
+			{int32(5), "Eve", int32(100)},
+		},
+	}
+	if err := catalog.CreateTable(table); err != nil {
+		t.Fatalf("Failed to create table: %v", err)
+	}
+
+	// Test = (equality)
+	stmt, _ := parser.Parse("SELECT id FROM items WHERE id = 2")
+	resp := executeSelect(stmt.(*tree.Select), catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for =, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 1 || resp.Rows[0][0].(int32) != 2 {
+		t.Fatalf("Expected 1 row with id=2, got %v", resp.Rows)
+	}
+
+	// Test <> (not equal)
+	stmt, _ = parser.Parse("SELECT id FROM items WHERE id <> 2")
+	resp = executeSelect(stmt.(*tree.Select), catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for <>, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 4 {
+		t.Fatalf("Expected 4 rows with id<>2, got %d", len(resp.Rows))
+	}
+
+	// Test < and >
+	stmt, _ = parser.Parse("SELECT id FROM items WHERE score < 150")
+	resp = executeSelect(stmt.(*tree.Select), catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for <, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 2 {
+		t.Fatalf(
+			"Expected 2 rows with score<150 (100, 100), got %d",
+			len(resp.Rows),
+		)
+	}
+
+	stmt, _ = parser.Parse("SELECT id FROM items WHERE score > 100")
+	resp = executeSelect(stmt.(*tree.Select), catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for >, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 2 {
+		t.Fatalf(
+			"Expected 2 rows with score>100 (200, 150), got %d",
+			len(resp.Rows),
+		)
+	}
+
+	// Test AND
+	stmt, _ = parser.Parse("SELECT id FROM items WHERE id > 1 AND id < 5")
+	resp = executeSelect(stmt.(*tree.Select), catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for AND, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 3 {
+		t.Fatalf("Expected 3 rows for id>1 AND id<5, got %d", len(resp.Rows))
+	}
+
+	// Test OR
+	stmt, _ = parser.Parse("SELECT id FROM items WHERE id = 1 OR id = 5")
+	resp = executeSelect(stmt.(*tree.Select), catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for OR, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 2 {
+		t.Fatalf("Expected 2 rows for id=1 OR id=5, got %d", len(resp.Rows))
+	}
+
+	// Test IS NULL
+	stmt, _ = parser.Parse("SELECT id FROM items WHERE score IS NULL")
+	resp = executeSelect(stmt.(*tree.Select), catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for IS NULL, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 1 || resp.Rows[0][0].(int32) != 4 {
+		t.Fatalf("Expected 1 row with score IS NULL (id=4), got %v", resp.Rows)
+	}
+
+	// Test IS NOT NULL
+	stmt, _ = parser.Parse("SELECT id FROM items WHERE score IS NOT NULL")
+	resp = executeSelect(stmt.(*tree.Select), catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for IS NOT NULL, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 4 {
+		t.Fatalf(
+			"Expected 4 rows with score IS NOT NULL, got %d",
+			len(resp.Rows),
+		)
+	}
+
+	// Test LIKE with %
+	stmt, _ = parser.Parse("SELECT id FROM items WHERE name LIKE 'A%'")
+	resp = executeSelect(stmt.(*tree.Select), catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for LIKE, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 1 || resp.Rows[0][0].(int32) != 1 {
+		t.Fatalf(
+			"Expected 1 row with name LIKE 'A%%' (Alice), got %v",
+			resp.Rows,
+		)
+	}
+
+	stmt, _ = parser.Parse("SELECT id FROM items WHERE name LIKE '%e'")
+	resp = executeSelect(stmt.(*tree.Select), catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for LIKE %%e, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 3 {
+		t.Fatalf(
+			"Expected 3 rows with name LIKE '%%e' (Alice, Charlie, Eve), got %d",
+			len(resp.Rows),
+		)
+	}
+
+	// Test LIKE with _
+	stmt, _ = parser.Parse("SELECT id FROM items WHERE name LIKE 'B_b'")
+	resp = executeSelect(stmt.(*tree.Select), catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for LIKE _, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 1 || resp.Rows[0][0].(int32) != 2 {
+		t.Fatalf("Expected 1 row with name LIKE 'B_b' (Bob), got %v", resp.Rows)
+	}
+
+	// Test IN
+	stmt, _ = parser.Parse("SELECT id FROM items WHERE id IN (1, 3, 5)")
+	resp = executeSelect(stmt.(*tree.Select), catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for IN, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 3 {
+		t.Fatalf("Expected 3 rows with id IN (1,3,5), got %d", len(resp.Rows))
+	}
+}
+
 // @TestDescription UPDATE ... SET ... WHERE modifies matching rows and returns the count of affected rows
 // @TestType integration
 // @FlakeScore 0.0
@@ -549,9 +711,9 @@ func TestSelectJoins(t *testing.T) {
 		t.Fatalf("Failed to create orders table: %v", err)
 	}
 
-	// Test INNER JOIN - use unqualified column names (implementation limitation)
+	// Test INNER JOIN - ON id = user_id (user 1→2 orders, user 2→1 order)
 	stmt, err := parser.Parse(
-		"SELECT * FROM users INNER JOIN orders ON id = user_id",
+		"SELECT name FROM users INNER JOIN orders ON id = user_id",
 	)
 	if err != nil {
 		t.Fatalf("Failed to parse INNER JOIN: %v", err)
@@ -561,22 +723,25 @@ func TestSelectJoins(t *testing.T) {
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for INNER JOIN, got %v", resp.Error)
 	}
-	// INNER JOIN should return joined rows from both tables
-	// Current implementation does cross join, we verify it returns rows
-	if len(resp.Rows) == 0 {
-		t.Fatalf("Expected rows from INNER JOIN, got 0")
+	if len(resp.Rows) != 3 {
+		t.Fatalf(
+			"Expected 3 rows from INNER JOIN (user1×2, user2×1), got %d",
+			len(resp.Rows),
+		)
 	}
-	// With cross join behavior: 3 users * 3 orders = 9 rows expected
-	// Just verify we got some rows and columns
-	t.Logf(
-		"INNER JOIN returned %d rows with %d columns",
-		len(resp.Rows),
-		len(resp.Columns),
-	)
+	// Verify names: Alice, Alice, Bob (user 1 has 2 orders, user 2 has 1)
+	names := []string{
+		resp.Rows[0][0].(string),
+		resp.Rows[1][0].(string),
+		resp.Rows[2][0].(string),
+	}
+	if names[0] != "Alice" || names[1] != "Alice" || names[2] != "Bob" {
+		t.Fatalf("Expected names [Alice, Alice, Bob], got %v", names)
+	}
 
-	// Test LEFT JOIN - use unqualified column names
+	// Test LEFT JOIN - includes user 3 (Charlie) with NULLs for orders
 	stmt, err = parser.Parse(
-		"SELECT * FROM users LEFT JOIN orders ON id = user_id",
+		"SELECT name FROM users LEFT JOIN orders ON id = user_id",
 	)
 	if err != nil {
 		t.Fatalf("Failed to parse LEFT JOIN: %v", err)
@@ -586,16 +751,16 @@ func TestSelectJoins(t *testing.T) {
 	if resp.Error != nil {
 		t.Fatalf("Expected no error for LEFT JOIN, got %v", resp.Error)
 	}
-	// LEFT JOIN should return rows
-	if len(resp.Rows) == 0 {
-		t.Fatalf("Expected rows from LEFT JOIN, got 0")
+	if len(resp.Rows) != 4 {
+		t.Fatalf(
+			"Expected 4 rows from LEFT JOIN (3 matches + 1 for user3 with NULLs), got %d",
+			len(resp.Rows),
+		)
 	}
-
-	t.Logf(
-		"LEFT JOIN returned %d rows with %d columns",
-		len(resp.Rows),
-		len(resp.Columns),
-	)
+	// Last row should be Charlie (user 3 with no matching orders)
+	if resp.Rows[3][0].(string) != "Charlie" {
+		t.Fatalf("Expected last row name Charlie, got %v", resp.Rows[3][0])
+	}
 }
 
 // @TestDescription COUNT, SUM, AVG with GROUP BY return correct aggregations
@@ -717,5 +882,88 @@ func TestSelectAggregatesGroupBy(t *testing.T) {
 	}
 	if maxVal != 300.0 {
 		t.Fatalf("Expected MAX=300.0, got %f", maxVal)
+	}
+
+	// Test GROUP BY
+	stmt, err = parser.Parse(
+		"SELECT region, COUNT(*), SUM(amount) FROM sales GROUP BY region",
+	)
+	if err != nil {
+		t.Fatalf("Failed to parse GROUP BY: %v", err)
+	}
+	selectStmt = stmt.(*tree.Select)
+	resp = executeSelect(selectStmt, catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for GROUP BY, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 3 {
+		t.Fatalf(
+			"Expected 3 rows for GROUP BY region (North, South, East), got %d",
+			len(resp.Rows),
+		)
+	}
+	// Build map of region -> (count, sum) for flexible assertion (row order may vary)
+	groupByResults := make(map[string]struct {
+		count int64
+		sum   float64
+	})
+	for _, row := range resp.Rows {
+		region := row[0].(string)
+		count := row[1].(int64)
+		sum := row[2].(float64)
+		groupByResults[region] = struct {
+			count int64
+			sum   float64
+		}{count, sum}
+	}
+	if g := groupByResults["North"]; g.count != 2 || g.sum != 300.0 {
+		t.Fatalf(
+			"Expected North: count=2, sum=300, got count=%d sum=%f",
+			g.count,
+			g.sum,
+		)
+	}
+	if g := groupByResults["South"]; g.count != 2 || g.sum != 200.0 {
+		t.Fatalf(
+			"Expected South: count=2, sum=200, got count=%d sum=%f",
+			g.count,
+			g.sum,
+		)
+	}
+	if g := groupByResults["East"]; g.count != 1 || g.sum != 300.0 {
+		t.Fatalf(
+			"Expected East: count=1, sum=300, got count=%d sum=%f",
+			g.count,
+			g.sum,
+		)
+	}
+
+	// Test GROUP BY with HAVING
+	stmt, err = parser.Parse(
+		"SELECT region, SUM(amount) FROM sales GROUP BY region HAVING SUM(amount) > 200",
+	)
+	if err != nil {
+		t.Fatalf("Failed to parse GROUP BY HAVING: %v", err)
+	}
+	selectStmt = stmt.(*tree.Select)
+	resp = executeSelect(selectStmt, catalog)
+	if resp.Error != nil {
+		t.Fatalf("Expected no error for GROUP BY HAVING, got %v", resp.Error)
+	}
+	if len(resp.Rows) != 2 {
+		t.Fatalf(
+			"Expected 2 rows for HAVING SUM(amount)>200 (North, East), got %d",
+			len(resp.Rows),
+		)
+	}
+	havingRegions := make(map[string]bool)
+	for _, row := range resp.Rows {
+		havingRegions[row[0].(string)] = true
+	}
+	if !havingRegions["North"] || !havingRegions["East"] {
+		t.Fatalf(
+			"Expected North and East in HAVING results, got %v",
+			havingRegions,
+		)
 	}
 }

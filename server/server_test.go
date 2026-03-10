@@ -315,3 +315,73 @@ func TestServer_InsertThenSelectBack(t *testing.T) {
 	// Clean up
 	_, _ = conn.Exec(ctx, "DROP TABLE IF EXISTS test_roundtrip")
 }
+
+// @TestDescription Empty SELECT returns RowDescription without DataRow
+// @TestType integration
+// @FlakeScore 0.0
+// @SystemName postgres-mem-go
+// @TestID ad0fad93-c961-4db6-b59d-44fa6817316a
+func TestServer_EmptySelectReturnsRowDescription(t *testing.T) {
+	srv := New("")
+	if err := srv.Start(); err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer func() { _ = srv.Stop() }()
+
+	addr := srv.Addr()
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=postgres dbname=postgres sslmode=disable",
+		addr.(*net.TCPAddr).IP.String(),
+		addr.(*net.TCPAddr).Port,
+	)
+
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer func() { _ = conn.Close(context.Background()) }()
+
+	_, err = conn.Exec(ctx, "CREATE TABLE empty_test (id INT, name TEXT)")
+	if err != nil {
+		t.Fatalf("CREATE TABLE failed: %v", err)
+	}
+	defer func() { _, _ = conn.Exec(ctx, "DROP TABLE IF EXISTS empty_test") }()
+
+	// SELECT with no matching rows - should return RowDescription + CommandComplete, no DataRow
+	rows, err := conn.Query(
+		ctx,
+		"SELECT id, name FROM empty_test WHERE 1=0",
+		pgx.QueryExecModeSimpleProtocol,
+	)
+	if err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	defer rows.Close()
+
+	// Verify we received column metadata (RowDescription)
+	fds := rows.FieldDescriptions()
+	if len(fds) != 2 {
+		t.Fatalf("Expected 2 column descriptions, got %d", len(fds))
+	}
+	if string(fds[0].Name) != "id" || string(fds[1].Name) != "name" {
+		t.Fatalf(
+			"Expected columns id, name; got %s, %s",
+			fds[0].Name,
+			fds[1].Name,
+		)
+	}
+
+	// Verify 0 rows
+	rowCount := 0
+	for rows.Next() {
+		rowCount++
+	}
+	if rowCount != 0 {
+		t.Fatalf("Expected 0 rows, got %d", rowCount)
+	}
+
+	if err := rows.Err(); err != nil {
+		t.Fatalf("Row iteration error: %v", err)
+	}
+}
